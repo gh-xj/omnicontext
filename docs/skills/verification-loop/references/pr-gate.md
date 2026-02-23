@@ -3,9 +3,10 @@
 ## Required Before Review
 
 - Verifier logs show all required checks passed.
-- Judge result is `QUALIFIED`.
+- Inspector verdict is `QUALIFIED` in `outbox/inspector.json`.
 - Scope is narrow and intentional.
 - PR body includes what/why/how and compatibility notes.
+- Human checked `review-checklist.md`.
 
 ## Suggested Artifacts in PR
 

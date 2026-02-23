@@ -1,6 +1,6 @@
 ---
 name: verification-loop
-description: Reusable project-level skill for iterative implement-verify-judge loops using filesystem inbox/outbox artifacts. Use for auto bug fixes, scoped feature updates, and quality-gated refinement until qualified.
+description: Reusable project-level skill for iterative implement-verify-inspect loops using filesystem inbox/outbox artifacts. Use for auto bug fixes, scoped feature updates, and quality-gated refinement until qualified.
 ---
 
 # Verification Loop Skill
@@ -24,7 +24,7 @@ Use repository `CONTRIBUTING.md` for policy and PR conventions.
 
 1. Define a testable goal and max iterations.
 2. Provide deterministic verifier command.
-3. Provide judge command that emits `QUALIFIED` only when acceptance criteria are met.
+3. Provide inspector command that writes `outbox/inspector.json` with a `QUALIFIED`/`NOT_QUALIFIED` verdict.
 4. Run loop and inspect run artifacts.
 5. If qualified, prepare PR using AI templates/checklist.
 
@@ -41,7 +41,9 @@ ocx lab run \
   --planner 'echo "- inspect\n- patch\n- verify" > "$OCX_LAB_PLAN_FILE"' \
   --implementer 'echo "implement step" > "$OCX_LAB_IMPL_FILE"' \
   --verify 'go test ./...' \
-  --judge 'if grep -q "FAIL" "$OCX_LAB_ITER_DIR/outbox/verify.log"; then echo NOT_QUALIFIED; exit 1; else echo QUALIFIED; fi'
+  --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''
+{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}
+JSON'
 ```
 
 ## References
@@ -53,6 +55,6 @@ ocx lab run \
 ## Boundaries
 
 - Do not skip verification.
-- Do not claim completion without judge/verifier evidence.
+- Do not claim completion without verifier/inspector evidence.
 - Keep loop scope narrow per run.
 - For large architecture changes, use issue-first alignment before deep implementation.

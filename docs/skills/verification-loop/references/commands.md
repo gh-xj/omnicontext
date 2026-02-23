@@ -5,8 +5,16 @@
 ```bash
 ocx lab init
 ocx lab run --config docs/templates/lab-config.example.json
-ocx lab run --goal "..." --verify "go test ./..." --judge "..."
+ocx lab run --goal "..." --verify "go test ./..." --inspector "<command>"
 ocx lab run --json ...
+```
+
+## Inspector Contract Example
+
+```bash
+cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'JSON'
+{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}
+JSON
 ```
 
 ## Recommended Verifier Commands
