@@ -6,6 +6,20 @@
 
 Local-first context memory and session tooling built with Go + SQLite.
 
+## Install
+
+Install from source:
+
+```bash
+go install github.com/gh-xj/omnicontext/cmd/ocx@latest
+```
+
+Or build locally in this repo:
+
+```bash
+go build -o bin/ocx ./cmd/ocx
+```
+
 ## First 5 Minutes
 
 ```bash
@@ -89,7 +103,7 @@ If using `evolve`, you also get PR handoff files:
 # loop tooling
 ./bin/ocx lab init
 ./bin/ocx lab run --config ./docs/templates/lab-config.example.json
-./bin/ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector '<command>'
+./bin/ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''\n{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}\nJSON'
 
 # health
 ./bin/ocx doctor
