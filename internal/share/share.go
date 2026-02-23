@@ -113,7 +113,14 @@ func ImportContext(st *store.Store, packPath string) (string, int, error) {
 		if typ == "" || p == "" {
 			continue
 		}
-		sid, err := st.UpsertImportedSession(typ, p)
+		sid, err := st.InsertImportedSession(store.SessionInput{
+			SessionType:    typ,
+			SessionPath:    p,
+			WorkspacePath:  p,
+			SessionTitle:   "imported session",
+			SessionSummary: "Imported from pack",
+			Metadata:       "{}",
+		}, nil)
 		if err != nil {
 			continue
 		}

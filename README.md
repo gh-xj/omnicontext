@@ -4,8 +4,8 @@ Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
 
 ## Features (MVP)
 - `ocx init` to initialize local store
-- `ocx import claude --path ...`
-- `ocx import codex --path ...`
+- `ocx import claude --path ...` (real Claude JSONL adapter)
+- `ocx import codex --path ...` (real Codex JSONL adapter)
 - `ocx context list`
 - `ocx context show <id>`
 - `ocx share export <context-id> --out ./x.ocxpack`
@@ -17,6 +17,7 @@ Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
 ```bash
 go mod tidy
 go build -o bin/ocx ./cmd/ocx
+go test ./...
 ```
 
 ## Quickstart

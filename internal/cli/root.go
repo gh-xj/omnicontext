@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/gh-xj/omnicontext/internal/adapters"
 	"github.com/gh-xj/omnicontext/internal/share"
 	"github.com/gh-xj/omnicontext/internal/store"
 	"github.com/gh-xj/omnicontext/internal/tui"
@@ -201,11 +202,37 @@ func newImportSubCmd(kind string, openStore func() (*store.Store, error)) *cobra
 				return err
 			}
 			defer st.Close()
-			sid, err := st.UpsertImportedSession(kind, p)
+			sessions, err := adapters.Parse(kind, p)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("imported %s session: %s\n", kind, sid)
+			inserted := 0
+			for _, s := range sessions {
+				turns := make([]store.TurnInput, 0, len(s.Turns))
+				for _, t := range s.Turns {
+					turns = append(turns, store.TurnInput{
+						UserMessage:      t.UserMessage,
+						AssistantSummary: t.AssistantSummary,
+						Timestamp:        t.Timestamp,
+					})
+				}
+				_, err := st.InsertImportedSession(store.SessionInput{
+					SessionID:      s.SessionID,
+					SessionType:    s.SessionType,
+					SessionPath:    s.SessionPath,
+					WorkspacePath:  s.WorkspacePath,
+					StartedAt:      s.StartedAt,
+					LastActivityAt: s.LastActivityAt,
+					SessionTitle:   s.SessionTitle,
+					SessionSummary: s.SessionSummary,
+					Metadata:       s.Metadata,
+				}, turns)
+				if err != nil {
+					continue
+				}
+				inserted++
+			}
+			fmt.Printf("imported %s sessions: %d/%d\n", kind, inserted, len(sessions))
 			return nil
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -21,6 +22,24 @@ type Context struct {
 	Summary   string
 	CreatedAt string
 	UpdatedAt string
+}
+
+type SessionInput struct {
+	SessionID      string
+	SessionType    string
+	SessionPath    string
+	WorkspacePath  string
+	StartedAt      string
+	LastActivityAt string
+	SessionTitle   string
+	SessionSummary string
+	Metadata       string
+}
+
+type TurnInput struct {
+	UserMessage      string
+	AssistantSummary string
+	Timestamp        string
 }
 
 func DefaultDataDir() string {
@@ -139,13 +158,96 @@ func (s *Store) UpsertImportedSession(kind, p string) (string, error) {
 	if _, err := s.DB.Exec(`
 		INSERT INTO sessions(id, session_type, session_path, workspace_path, started_at, last_activity_at, session_title, metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, sid, kind, p, p, now, now, "imported session", "{}" ); err != nil {
+	`, sid, kind, p, p, now, now, "imported session", "{}"); err != nil {
 		return "", err
 	}
 	if _, err := s.DB.Exec(`INSERT OR IGNORE INTO context_sessions(context_id, session_id) VALUES ('default', ?)`, sid); err != nil {
 		return "", err
 	}
 	return sid, nil
+}
+
+func (s *Store) InsertImportedSession(input SessionInput, turns []TurnInput) (string, error) {
+	if input.SessionType != "claude" && input.SessionType != "codex" {
+		return "", errors.New("unsupported session type")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	sid := strings.TrimSpace(input.SessionID)
+	if sid == "" {
+		sid = fmt.Sprintf("%s-%d", input.SessionType, time.Now().UTC().UnixNano())
+	}
+	started := strings.TrimSpace(input.StartedAt)
+	if started == "" {
+		started = now
+	}
+	last := strings.TrimSpace(input.LastActivityAt)
+	if last == "" {
+		last = started
+	}
+	title := strings.TrimSpace(input.SessionTitle)
+	if title == "" {
+		title = "imported session"
+	}
+	metadata := strings.TrimSpace(input.Metadata)
+	if metadata == "" {
+		metadata = "{}"
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if _, err := tx.Exec(`
+		INSERT INTO sessions(id, session_type, session_path, workspace_path, started_at, last_activity_at, session_title, session_summary, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, sid, input.SessionType, input.SessionPath, input.WorkspacePath, started, last, title, input.SessionSummary, metadata); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO context_sessions(context_id, session_id) VALUES ('default', ?)`, sid); err != nil {
+		return "", err
+	}
+	for i, t := range turns {
+		turnTS := strings.TrimSpace(t.Timestamp)
+		if turnTS == "" {
+			turnTS = now
+		}
+		turnID := fmt.Sprintf("%s-turn-%d", sid, i+1)
+		contentHash := fmt.Sprintf("%s-%d", sid, i+1)
+		if _, err := tx.Exec(`
+			INSERT INTO turns(id, session_id, turn_number, user_message, assistant_summary, timestamp, content_hash)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, turnID, sid, i+1, t.UserMessage, t.AssistantSummary, turnTS, contentHash); err != nil {
+			return "", err
+		}
+	}
+
+	if _, err := tx.Exec(`UPDATE contexts SET updated_at = datetime('now') WHERE id = 'default'`); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return sid, nil
+}
+
+func (s *Store) CountSessions() (int, error) {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func (s *Store) CountTurnsForSession(sessionID string) (int, error) {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM turns WHERE session_id = ?`, sessionID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 func (s *Store) ListContexts() ([]Context, error) {
