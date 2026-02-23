@@ -107,6 +107,7 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 			defer st.Close()
+			_ = st.RefreshContextSummary(args[0])
 			ctx, count, err := st.GetContext(args[0])
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -121,6 +122,45 @@ func NewRootCmd() *cobra.Command {
 			}
 			for _, s := range sessions {
 				fmt.Printf("- %s\t%s\t%s\n", s["id"], s["type"], s["path"])
+			}
+			return nil
+		},
+	})
+	contextCmd.AddCommand(&cobra.Command{
+		Use:   "stats <context-id>",
+		Short: "Show aggregated stats for a context",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			stats, err := st.GetContextStats(args[0])
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("context not found: %s", args[0])
+				}
+				return err
+			}
+			fmt.Printf("context: %s\nsessions: %d\nturns: %d\nlast_activity: %s\n", stats.ContextID, stats.SessionCount, stats.TurnCount, stats.LastActivityAt)
+			fmt.Printf("summary: %s\n", store.BuildContextSummary(stats))
+			fmt.Println("sources:")
+			if len(stats.SourceCounts) == 0 {
+				fmt.Println("- (none)")
+			}
+			for _, kv := range stats.SourceCounts {
+				fmt.Printf("- %s\t%d\n", kv.Key, kv.Count)
+			}
+			fmt.Println("workspaces:")
+			if len(stats.WorkspaceCounts) == 0 {
+				fmt.Println("- (none)")
+			}
+			for i, kv := range stats.WorkspaceCounts {
+				if i >= 10 {
+					break
+				}
+				fmt.Printf("- %s\t%d\n", kv.Key, kv.Count)
 			}
 			return nil
 		},
@@ -166,6 +206,8 @@ func NewRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			_ = st.RefreshContextSummary(ctxID)
+			_ = st.RefreshContextSummary("default")
 			fmt.Printf("imported context: %s (sessions=%d)\n", ctxID, n)
 			return nil
 		},
@@ -336,5 +378,6 @@ func importFromPath(st *store.Store, kind, p string) (inserted int, parsed int, 
 		}
 		inserted++
 	}
+	_ = st.RefreshContextSummary("default")
 	return inserted, parsed, skipped, nil
 }

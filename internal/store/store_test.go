@@ -75,3 +75,67 @@ func TestSessionExistsByPath(t *testing.T) {
 		t.Fatalf("expected path to exist")
 	}
 }
+
+func TestContextStatsAndSummary(t *testing.T) {
+	st, dir := newTestStore(t)
+	defer st.Close()
+
+	_, err := st.InsertImportedSession(SessionInput{
+		SessionID:      "claude-stats-1",
+		SessionType:    "claude",
+		SessionPath:    filepath.Join(dir, "claude.jsonl"),
+		WorkspacePath:  "/tmp/ws-a",
+		SessionTitle:   "claude one",
+		SessionSummary: "hello",
+	}, []TurnInput{
+		{UserMessage: "u1", AssistantSummary: "a1", Timestamp: "2026-01-01T00:00:01Z"},
+		{UserMessage: "u2", AssistantSummary: "a2", Timestamp: "2026-01-01T00:00:02Z"},
+	})
+	if err != nil {
+		t.Fatalf("insert 1: %v", err)
+	}
+	_, err = st.InsertImportedSession(SessionInput{
+		SessionID:      "codex-stats-1",
+		SessionType:    "codex",
+		SessionPath:    filepath.Join(dir, "codex.jsonl"),
+		WorkspacePath:  "/tmp/ws-a",
+		SessionTitle:   "codex one",
+		SessionSummary: "world",
+	}, []TurnInput{
+		{UserMessage: "u3", AssistantSummary: "a3", Timestamp: "2026-01-01T00:00:03Z"},
+	})
+	if err != nil {
+		t.Fatalf("insert 2: %v", err)
+	}
+
+	stats, err := st.GetContextStats("default")
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.SessionCount != 2 {
+		t.Fatalf("session count = %d", stats.SessionCount)
+	}
+	if stats.TurnCount != 3 {
+		t.Fatalf("turn count = %d", stats.TurnCount)
+	}
+	if len(stats.SourceCounts) != 2 {
+		t.Fatalf("source counts len = %d", len(stats.SourceCounts))
+	}
+	if len(stats.WorkspaceCounts) < 1 || stats.WorkspaceCounts[0].Key != "/tmp/ws-a" {
+		t.Fatalf("workspace counts unexpected: %+v", stats.WorkspaceCounts)
+	}
+	summary := BuildContextSummary(stats)
+	if summary == "" {
+		t.Fatalf("empty summary")
+	}
+	if err := st.RefreshContextSummary("default"); err != nil {
+		t.Fatalf("refresh summary: %v", err)
+	}
+	ctx, _, err := st.GetContext("default")
+	if err != nil {
+		t.Fatalf("get context: %v", err)
+	}
+	if ctx.Summary == "" {
+		t.Fatalf("context summary empty after refresh")
+	}
+}

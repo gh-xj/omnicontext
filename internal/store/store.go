@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -40,6 +41,20 @@ type TurnInput struct {
 	UserMessage      string
 	AssistantSummary string
 	Timestamp        string
+}
+
+type ContextStats struct {
+	ContextID       string
+	SessionCount    int
+	TurnCount       int
+	LastActivityAt  string
+	SourceCounts    []KVCount
+	WorkspaceCounts []KVCount
+}
+
+type KVCount struct {
+	Key   string
+	Count int
 }
 
 func DefaultDataDir() string {
@@ -231,6 +246,7 @@ func (s *Store) InsertImportedSession(input SessionInput, turns []TurnInput) (st
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
+	_ = s.RefreshContextSummary("default")
 	return sid, nil
 }
 
@@ -313,4 +329,120 @@ func (s *Store) SessionsForContext(id string) ([]map[string]string, error) {
 		})
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) GetContextStats(contextID string) (ContextStats, error) {
+	stats := ContextStats{ContextID: contextID}
+	var exists int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM contexts WHERE id = ?`, contextID).Scan(&exists); err != nil {
+		return ContextStats{}, err
+	}
+	if exists == 0 {
+		return ContextStats{}, sql.ErrNoRows
+	}
+
+	if err := s.DB.QueryRow(`
+		SELECT COUNT(*), COALESCE(SUM(ts.turn_count),0), COALESCE(MAX(s.last_activity_at),'')
+		FROM context_sessions cs
+		JOIN sessions s ON s.id = cs.session_id
+		LEFT JOIN (
+			SELECT session_id, COUNT(*) AS turn_count
+			FROM turns
+			GROUP BY session_id
+		) ts ON ts.session_id = s.id
+		WHERE cs.context_id = ?
+	`, contextID).Scan(&stats.SessionCount, &stats.TurnCount, &stats.LastActivityAt); err != nil {
+		return ContextStats{}, err
+	}
+
+	srcRows, err := s.DB.Query(`
+		SELECT s.session_type, COUNT(*)
+		FROM context_sessions cs
+		JOIN sessions s ON s.id = cs.session_id
+		WHERE cs.context_id = ?
+		GROUP BY s.session_type
+	`, contextID)
+	if err != nil {
+		return ContextStats{}, err
+	}
+	for srcRows.Next() {
+		var k string
+		var c int
+		if err := srcRows.Scan(&k, &c); err != nil {
+			srcRows.Close()
+			return ContextStats{}, err
+		}
+		stats.SourceCounts = append(stats.SourceCounts, KVCount{Key: k, Count: c})
+	}
+	srcRows.Close()
+
+	wsRows, err := s.DB.Query(`
+		SELECT COALESCE(NULLIF(s.workspace_path,''),'(unknown)'), COUNT(*)
+		FROM context_sessions cs
+		JOIN sessions s ON s.id = cs.session_id
+		WHERE cs.context_id = ?
+		GROUP BY COALESCE(NULLIF(s.workspace_path,''),'(unknown)')
+	`, contextID)
+	if err != nil {
+		return ContextStats{}, err
+	}
+	for wsRows.Next() {
+		var k string
+		var c int
+		if err := wsRows.Scan(&k, &c); err != nil {
+			wsRows.Close()
+			return ContextStats{}, err
+		}
+		stats.WorkspaceCounts = append(stats.WorkspaceCounts, KVCount{Key: k, Count: c})
+	}
+	wsRows.Close()
+
+	sort.Slice(stats.SourceCounts, func(i, j int) bool {
+		if stats.SourceCounts[i].Count == stats.SourceCounts[j].Count {
+			return stats.SourceCounts[i].Key < stats.SourceCounts[j].Key
+		}
+		return stats.SourceCounts[i].Count > stats.SourceCounts[j].Count
+	})
+	sort.Slice(stats.WorkspaceCounts, func(i, j int) bool {
+		if stats.WorkspaceCounts[i].Count == stats.WorkspaceCounts[j].Count {
+			return stats.WorkspaceCounts[i].Key < stats.WorkspaceCounts[j].Key
+		}
+		return stats.WorkspaceCounts[i].Count > stats.WorkspaceCounts[j].Count
+	})
+
+	return stats, nil
+}
+
+func BuildContextSummary(stats ContextStats) string {
+	if stats.SessionCount == 0 {
+		return "No sessions imported yet."
+	}
+	src := "sources: n/a"
+	if len(stats.SourceCounts) > 0 {
+		parts := make([]string, 0, len(stats.SourceCounts))
+		for _, it := range stats.SourceCounts {
+			parts = append(parts, fmt.Sprintf("%s=%d", it.Key, it.Count))
+		}
+		src = "sources: " + strings.Join(parts, ", ")
+	}
+	ws := ""
+	if len(stats.WorkspaceCounts) > 0 {
+		top := stats.WorkspaceCounts[0]
+		ws = fmt.Sprintf("; top workspace: %s (%d)", top.Key, top.Count)
+	}
+	last := ""
+	if stats.LastActivityAt != "" {
+		last = fmt.Sprintf("; last activity: %s", stats.LastActivityAt)
+	}
+	return fmt.Sprintf("%d sessions, %d turns; %s%s%s", stats.SessionCount, stats.TurnCount, src, ws, last)
+}
+
+func (s *Store) RefreshContextSummary(contextID string) error {
+	stats, err := s.GetContextStats(contextID)
+	if err != nil {
+		return err
+	}
+	summary := BuildContextSummary(stats)
+	_, err = s.DB.Exec(`UPDATE contexts SET summary = ?, updated_at = datetime('now') WHERE id = ?`, summary, contextID)
+	return err
 }
