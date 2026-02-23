@@ -72,3 +72,7 @@ Use custom path:
   - `docs/skills/verification-loop/references/pr-gate.md`
   - `docs/skills/verification-loop-generic.md` (high-level design)
   - `docs/templates/lab-config.example.json`
+
+## Release Notes
+
+- Template: `docs/templates/release-notes-template.md`
