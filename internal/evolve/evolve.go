@@ -19,6 +19,8 @@ type Config struct {
 	DataDir            string
 	Goal               string
 	MaxIterations      int
+	ContextDesigner    string
+	LauncherCommand    string
 	VerifyCommand      string
 	PlannerCommand     string
 	ImplementerCommand string
@@ -100,6 +102,8 @@ func Run(cfg Config) (Report, error) {
 		Workspace:          cfg.Workspace,
 		Goal:               cfg.Goal,
 		MaxIterations:      cfg.MaxIterations,
+		ContextDesigner:    cfg.ContextDesigner,
+		LauncherCommand:    cfg.LauncherCommand,
 		PlannerCommand:     cfg.PlannerCommand,
 		ImplementerCommand: cfg.ImplementerCommand,
 		VerifyCommand:      cfg.VerifyCommand,

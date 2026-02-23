@@ -51,6 +51,8 @@ func newEvolveCmd(dataDirProvider func() string) *cobra.Command {
 
 	run.Flags().StringVar(&cfg.Goal, "goal", "", "Target goal for auto-improvement loop")
 	run.Flags().IntVar(&cfg.MaxIterations, "max-iterations", 3, "Max loop iterations")
+	run.Flags().StringVar(&cfg.ContextDesigner, "context-designer", "", "Context designer command (optional)")
+	run.Flags().StringVar(&cfg.LauncherCommand, "launcher", "", "Agent launcher command (optional)")
 	run.Flags().StringVar(&cfg.VerifyCommand, "verify", "go vet ./... && go test ./... && go build ./cmd/ocx", "Verification command")
 	run.Flags().StringVar(&cfg.PlannerCommand, "planner", "", "Planner command (optional)")
 	run.Flags().StringVar(&cfg.ImplementerCommand, "implementer", "", "Implementer command (optional)")

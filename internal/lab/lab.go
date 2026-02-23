@@ -2,6 +2,8 @@ package lab
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,6 +17,8 @@ type Config struct {
 	Workspace          string `json:"workspace"`
 	Goal               string `json:"goal"`
 	MaxIterations      int    `json:"max_iterations"`
+	ContextDesigner    string `json:"context_designer_command"`
+	LauncherCommand    string `json:"launcher_command"`
 	PlannerCommand     string `json:"planner_command"`
 	ImplementerCommand string `json:"implementer_command"`
 	VerifyCommand      string `json:"verify_command"`
@@ -26,10 +30,14 @@ type IterationResult struct {
 	Iteration     int       `json:"iteration"`
 	StartedAt     time.Time `json:"started_at"`
 	FinishedAt    time.Time `json:"finished_at"`
+	ContextCode   int       `json:"context_designer_code"`
+	LauncherCode  int       `json:"launcher_code"`
 	PlannerCode   int       `json:"planner_code"`
 	ImplementCode int       `json:"implement_code"`
 	VerifyCode    int       `json:"verify_code"`
 	JudgeCode     int       `json:"judge_code"`
+	ContextPack   string    `json:"context_pack"`
+	ContextHash   string    `json:"context_pack_sha256"`
 	Qualified     bool      `json:"qualified"`
 	Reason        string    `json:"reason"`
 }
@@ -93,15 +101,36 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 
 		_ = os.WriteFile(filepath.Join(iterDir, "inbox", "goal.md"), []byte(cfg.Goal+"\n"), 0o644)
 		_ = os.WriteFile(filepath.Join(iterDir, "inbox", "constraints.md"), []byte("Keep changes minimal, pass verification, and stop only when qualified.\n"), 0o644)
+		contextPackPath := filepath.Join(iterDir, "inbox", "context-pack.md")
+		_ = os.WriteFile(contextPackPath, []byte(defaultContextPack(cfg.Goal, filepath.Join(iterDir, "inbox", "constraints.md"))), 0o644)
 
 		env := map[string]string{
-			"OCX_LAB_RUN_DIR":    runDir,
-			"OCX_LAB_ITER_DIR":   iterDir,
-			"OCX_LAB_WORKSPACE":  cfg.Workspace,
-			"OCX_LAB_GOAL_FILE":  filepath.Join(iterDir, "inbox", "goal.md"),
-			"OCX_LAB_PLAN_FILE":  filepath.Join(iterDir, "outbox", "planner.md"),
-			"OCX_LAB_IMPL_FILE":  filepath.Join(iterDir, "outbox", "implementer.md"),
-			"OCX_LAB_JUDGE_FILE": filepath.Join(iterDir, "outbox", "judge.md"),
+			"OCX_LAB_RUN_DIR":           runDir,
+			"OCX_LAB_ITER_DIR":          iterDir,
+			"OCX_LAB_WORKSPACE":         cfg.Workspace,
+			"OCX_LAB_GOAL_FILE":         filepath.Join(iterDir, "inbox", "goal.md"),
+			"OCX_LAB_CONSTRAINTS_FILE":  filepath.Join(iterDir, "inbox", "constraints.md"),
+			"OCX_LAB_CONTEXT_PACK_FILE": contextPackPath,
+			"OCX_LAB_PLAN_FILE":         filepath.Join(iterDir, "outbox", "planner.md"),
+			"OCX_LAB_IMPL_FILE":         filepath.Join(iterDir, "outbox", "implementer.md"),
+			"OCX_LAB_JUDGE_FILE":        filepath.Join(iterDir, "outbox", "judge.md"),
+		}
+
+		if strings.TrimSpace(cfg.ContextDesigner) != "" {
+			code, out := runShell(cfg.Shell, cfg.Workspace, cfg.ContextDesigner, env)
+			iter.ContextCode = code
+			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "context-designer.log"), out, 0o644)
+		}
+		iter.ContextPack = contextPackPath
+		iter.ContextHash = hashFileSHA256(contextPackPath)
+		if iter.ContextHash != "" {
+			env["OCX_LAB_CONTEXT_PACK_SHA256"] = iter.ContextHash
+		}
+
+		if strings.TrimSpace(cfg.LauncherCommand) != "" {
+			code, out := runShell(cfg.Shell, cfg.Workspace, cfg.LauncherCommand, env)
+			iter.LauncherCode = code
+			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "launcher.log"), out, 0o644)
 		}
 
 		if strings.TrimSpace(cfg.PlannerCommand) != "" {
@@ -185,8 +214,8 @@ func runShell(shell, cwd, command string, extraEnv map[string]string) (int, []by
 
 func writeIterationSummary(iterDir string, iter IterationResult) {
 	_ = os.WriteFile(filepath.Join(iterDir, "summary.md"), []byte(fmt.Sprintf(
-		"# Iteration %d\n\n- Qualified: %v\n- Reason: %s\n- Planner exit: %d\n- Implementer exit: %d\n- Verify exit: %d\n- Judge exit: %d\n",
-		iter.Iteration, iter.Qualified, iter.Reason, iter.PlannerCode, iter.ImplementCode, iter.VerifyCode, iter.JudgeCode,
+		"# Iteration %d\n\n- Qualified: %v\n- Reason: %s\n- Context designer exit: %d\n- Launcher exit: %d\n- Planner exit: %d\n- Implementer exit: %d\n- Verify exit: %d\n- Judge exit: %d\n- Context pack: %s\n- Context SHA256: %s\n",
+		iter.Iteration, iter.Qualified, iter.Reason, iter.ContextCode, iter.LauncherCode, iter.PlannerCode, iter.ImplementCode, iter.VerifyCode, iter.JudgeCode, iter.ContextPack, iter.ContextHash,
 	)), 0o644)
 }
 
@@ -203,4 +232,17 @@ func writeRunReport(runDir string, report RunReport) error {
 		md = append(md, []byte(fmt.Sprintf("- Iteration %d: qualified=%v, reason=%s, verify=%d, judge=%d\n", it.Iteration, it.Qualified, it.Reason, it.VerifyCode, it.JudgeCode))...)
 	}
 	return os.WriteFile(filepath.Join(runDir, "report.md"), md, 0o644)
+}
+
+func hashFileSHA256(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+func defaultContextPack(goal, constraintsPath string) string {
+	return fmt.Sprintf("# Context Pack\n\n## Goal\n%s\n\n## Constraints File\n%s\n\n## Acceptance\n- Verification command exits 0.\n- Judge emits QUALIFIED.\n", goal, constraintsPath)
 }

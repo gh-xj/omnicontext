@@ -27,6 +27,8 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 			sample := lab.Config{
 				Goal:               "Fix failing tests and ship a safe patch",
 				MaxIterations:      3,
+				ContextDesigner:    "printf '# Experiment Context\\n\\n- control variables fixed\\n- acceptance explicit\\n' > \"$OCX_LAB_CONTEXT_PACK_FILE\"",
+				LauncherCommand:    "echo 'launcher placeholder (invoke external agent here)' > \"$OCX_LAB_ITER_DIR/outbox/launcher.log\"",
 				PlannerCommand:     "echo '- inspect failures\n- patch minimal\n- re-verify' > \"$OCX_LAB_PLAN_FILE\"",
 				ImplementerCommand: "echo 'implementer placeholder' > \"$OCX_LAB_IMPL_FILE\"",
 				VerifyCommand:      "go test ./...",
@@ -47,6 +49,8 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 
 	var goal string
 	var maxIterations int
+	var contextDesigner string
+	var launcher string
 	var planner string
 	var implementer string
 	var verify string
@@ -76,6 +80,12 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 			}
 			if maxIterations > 0 {
 				cfg.MaxIterations = maxIterations
+			}
+			if contextDesigner != "" {
+				cfg.ContextDesigner = contextDesigner
+			}
+			if launcher != "" {
+				cfg.LauncherCommand = launcher
 			}
 			if planner != "" {
 				cfg.PlannerCommand = planner
@@ -125,6 +135,8 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 	runCmd.Flags().StringVar(&configPath, "config", "", "Path to JSON config")
 	runCmd.Flags().StringVar(&goal, "goal", "", "Run goal")
 	runCmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "Max iterations")
+	runCmd.Flags().StringVar(&contextDesigner, "context-designer", "", "Context designer command")
+	runCmd.Flags().StringVar(&launcher, "launcher", "", "Agent launcher command")
 	runCmd.Flags().StringVar(&planner, "planner", "", "Planner command")
 	runCmd.Flags().StringVar(&implementer, "implementer", "", "Implementer command")
 	runCmd.Flags().StringVar(&verify, "verify", "", "Verification command (required)")

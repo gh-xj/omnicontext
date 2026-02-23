@@ -61,6 +61,8 @@ Expected workflow:
 ./bin/ocx evolve run \
   --goal "fix bug X with backward compatibility" \
   --max-iterations 3 \
+  --context-designer "printf '# Context Pack\n- stable acceptance\n' > \"$OCX_LAB_CONTEXT_PACK_FILE\"" \
+  --launcher "echo 'launch external agent with context-pack' > \"$OCX_LAB_ITER_DIR/outbox/launcher.log\"" \
   --verify "go vet ./... && go test ./... && go build ./cmd/ocx" \
   --auto-commit
 ```

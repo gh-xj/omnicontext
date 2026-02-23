@@ -20,6 +20,8 @@ User-triggered workflow:
 ocx evolve run \
   --goal "<specific bug/feature target>" \
   --max-iterations 3 \
+  --context-designer "printf '# Context Pack\n- fixed acceptance\n' > \"$OCX_LAB_CONTEXT_PACK_FILE\"" \
+  --launcher "echo 'launch agent with context pack' > \"$OCX_LAB_ITER_DIR/outbox/launcher.log\"" \
   --verify "go vet ./... && go test ./... && go build ./cmd/ocx" \
   --auto-commit \
   --open-draft-pr=false

@@ -1,6 +1,8 @@
 {
   "goal": "Fix failing tests and ship a safe patch",
   "max_iterations": 3,
+  "context_designer_command": "printf '# Context Pack\\n\\n- acceptance fixed\\n- deterministic verify\\n' > \"$OCX_LAB_CONTEXT_PACK_FILE\"",
+  "launcher_command": "echo 'launch agent with context pack here' > \"$OCX_LAB_ITER_DIR/outbox/launcher.log\"",
   "planner_command": "echo '- inspect failures\\n- patch minimal\\n- re-verify' > \"$OCX_LAB_PLAN_FILE\"",
   "implementer_command": "echo 'implementer placeholder' > \"$OCX_LAB_IMPL_FILE\"",
   "verify_command": "go test ./...",
