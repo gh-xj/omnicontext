@@ -33,7 +33,6 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 				ImplementerCommand: "echo 'implementer placeholder' > \"$OCX_LAB_IMPL_FILE\"",
 				VerifyCommand:      "go test ./...",
 				InspectorCommand:   "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\n{\"verdict\":\"QUALIFIED\",\"reasons\":[\"sample passed\"],\"patch_hints\":[],\"confidence\":0.90}\nJSON",
-				JudgeCommand:       "if grep -q 'FAIL' \"$OCX_LAB_ITER_DIR/outbox/verify.log\"; then echo NOT_QUALIFIED; exit 1; else echo QUALIFIED; fi",
 			}
 			b, _ := json.MarshalIndent(sample, "", "  ")
 			cfgPath := filepath.Join(d, "sample-config.json")
@@ -56,7 +55,6 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 	var implementer string
 	var verify string
 	var inspector string
-	var judge string
 	var shell string
 	var configPath string
 	var workspace string
@@ -101,9 +99,6 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 			if inspector != "" {
 				cfg.InspectorCommand = inspector
 			}
-			if judge != "" {
-				cfg.JudgeCommand = judge
-			}
 			if shell != "" {
 				cfg.Shell = shell
 			}
@@ -146,7 +141,6 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 	runCmd.Flags().StringVar(&implementer, "implementer", "", "Implementer command")
 	runCmd.Flags().StringVar(&verify, "verify", "", "Verification command (required)")
 	runCmd.Flags().StringVar(&inspector, "inspector", "", "Inspector command (required)")
-	runCmd.Flags().StringVar(&judge, "judge", "", "Judge command (outputs QUALIFIED / NOT_QUALIFIED)")
 	runCmd.Flags().StringVar(&shell, "shell", "", "Shell executable for command execution")
 	runCmd.Flags().StringVar(&workspace, "workspace", "", "Workspace to run commands in (default: cwd)")
 	runCmd.Flags().BoolVar(&jsonOut, "json", false, "Emit JSON report to stdout")

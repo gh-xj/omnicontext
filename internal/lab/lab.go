@@ -23,7 +23,6 @@ type Config struct {
 	ImplementerCommand string `json:"implementer_command"`
 	VerifyCommand      string `json:"verify_command"`
 	InspectorCommand   string `json:"inspector_command"`
-	JudgeCommand       string `json:"judge_command"`
 	Shell              string `json:"shell"`
 }
 
@@ -37,7 +36,6 @@ type IterationResult struct {
 	ImplementCode int       `json:"implement_code"`
 	VerifyCode    int       `json:"verify_code"`
 	InspectorCode int       `json:"inspector_code"`
-	JudgeCode     int       `json:"judge_code"`
 	ContextPack   string    `json:"context_pack"`
 	ContextHash   string    `json:"context_pack_sha256"`
 	InspectorPath string    `json:"inspector_path"`
@@ -119,7 +117,6 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 			"OCX_LAB_CONTEXT_PACK_FILE":   contextPackPath,
 			"OCX_LAB_PLAN_FILE":           filepath.Join(iterDir, "outbox", "planner.md"),
 			"OCX_LAB_IMPL_FILE":           filepath.Join(iterDir, "outbox", "implementer.md"),
-			"OCX_LAB_JUDGE_FILE":          filepath.Join(iterDir, "outbox", "judge.md"),
 			"OCX_LAB_INSPECTOR_JSON_FILE": inspectorPath,
 			"OCX_LAB_INSPECTOR_LOG_FILE":  inspectorLogPath,
 			"OCX_LAB_VERIFY_LOG_FILE":     verifyLogPath,
@@ -155,7 +152,6 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 			iter.Inspector = inspector.Verdict
 		}
 
-		iter.JudgeCode = runOptionalCommand(cfg.Shell, cfg.Workspace, cfg.JudgeCommand, env, filepath.Join(iterDir, "outbox", "judge.log"))
 		qualified, reason := evaluateQualification(vcode, iter.InspectorCode, inspector, inspectorErr)
 		if !qualified && inspectorErr == nil && len(inspector.PatchHints) > 0 {
 			nextStepHints = append([]string{}, inspector.PatchHints...)
@@ -268,8 +264,8 @@ func evaluateQualification(verifyCode, inspectorCode int, inspector inspectorOut
 
 func writeIterationSummary(iterDir string, iter IterationResult) {
 	_ = os.WriteFile(filepath.Join(iterDir, "summary.md"), []byte(fmt.Sprintf(
-		"# Iteration %d\n\n- Qualified: %v\n- Reason: %s\n- Context designer exit: %d\n- Launcher exit: %d\n- Planner exit: %d\n- Implementer exit: %d\n- Verify exit: %d\n- Inspector exit: %d\n- Judge exit: %d\n- Inspector schema valid: %v\n- Inspector verdict: %s\n- Inspector file: %s\n- Context pack: %s\n- Context SHA256: %s\n",
-		iter.Iteration, iter.Qualified, iter.Reason, iter.ContextCode, iter.LauncherCode, iter.PlannerCode, iter.ImplementCode, iter.VerifyCode, iter.InspectorCode, iter.JudgeCode, iter.InspectorOK, iter.Inspector, iter.InspectorPath, iter.ContextPack, iter.ContextHash,
+		"# Iteration %d\n\n- Qualified: %v\n- Reason: %s\n- Context designer exit: %d\n- Launcher exit: %d\n- Planner exit: %d\n- Implementer exit: %d\n- Verify exit: %d\n- Inspector exit: %d\n- Inspector schema valid: %v\n- Inspector verdict: %s\n- Inspector file: %s\n- Context pack: %s\n- Context SHA256: %s\n",
+		iter.Iteration, iter.Qualified, iter.Reason, iter.ContextCode, iter.LauncherCode, iter.PlannerCode, iter.ImplementCode, iter.VerifyCode, iter.InspectorCode, iter.InspectorOK, iter.Inspector, iter.InspectorPath, iter.ContextPack, iter.ContextHash,
 	)), 0o644)
 }
 
@@ -283,9 +279,33 @@ func writeRunReport(runDir string, report RunReport) error {
 	}
 	md := []byte(fmt.Sprintf("# OCX Lab Report\n\n- Run ID: %s\n- Goal: %s\n- Qualified: %v\n- Result: %s\n\n## Iterations\n", report.RunID, report.Goal, report.Qualified, report.FinalMessage))
 	for _, it := range report.Iterations {
-		md = append(md, []byte(fmt.Sprintf("- Iteration %d: qualified=%v, reason=%s, verify=%d, judge=%d\n", it.Iteration, it.Qualified, it.Reason, it.VerifyCode, it.JudgeCode))...)
+		md = append(md, []byte(fmt.Sprintf("- Iteration %d: qualified=%v, reason=%s, verify=%d, inspector=%d\n", it.Iteration, it.Qualified, it.Reason, it.VerifyCode, it.InspectorCode))...)
 	}
-	return os.WriteFile(filepath.Join(runDir, "report.md"), md, 0o644)
+	if err := os.WriteFile(filepath.Join(runDir, "report.md"), md, 0o644); err != nil {
+		return err
+	}
+	return writeReviewChecklist(runDir, report)
+}
+
+func writeReviewChecklist(runDir string, report RunReport) error {
+	var b strings.Builder
+	b.WriteString("# Human Review Checklist\n\n")
+	b.WriteString("- Confirm goal aligns with requested scope.\n")
+	b.WriteString("- Confirm last iteration is qualified by verifier + inspector.\n")
+	b.WriteString("- Inspect inspector verdict/reasons/patch_hints/confidence.\n")
+	b.WriteString("- Inspect verifier log for the same iteration.\n")
+	b.WriteString("- Verify changed files are intentional before PR/merge.\n\n")
+	if len(report.Iterations) > 0 {
+		last := report.Iterations[len(report.Iterations)-1]
+		iterDir := filepath.Join(runDir, fmt.Sprintf("iter-%03d", last.Iteration))
+		b.WriteString("## Evidence Paths\n")
+		b.WriteString("- Iteration summary: `" + filepath.Join(iterDir, "summary.md") + "`\n")
+		b.WriteString("- Inspector JSON: `" + last.InspectorPath + "`\n")
+		b.WriteString("- Inspector log: `" + filepath.Join(iterDir, "outbox", "inspector.log") + "`\n")
+		b.WriteString("- Verifier log: `" + filepath.Join(iterDir, "outbox", "verify.log") + "`\n")
+		b.WriteString("- Session ref: `" + filepath.Join(iterDir, "inbox", "session-ref.json") + "`\n")
+	}
+	return os.WriteFile(filepath.Join(runDir, "review-checklist.md"), []byte(b.String()), 0o644)
 }
 
 func hashFileSHA256(path string) string {

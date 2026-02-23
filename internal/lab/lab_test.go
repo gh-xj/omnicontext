@@ -19,7 +19,6 @@ func TestRunQualifies(t *testing.T) {
 		ImplementerCommand: "touch marker.txt && echo done > \"$OCX_LAB_IMPL_FILE\"",
 		VerifyCommand:      "test -f marker.txt",
 		InspectorCommand:   "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\n{\"verdict\":\"QUALIFIED\",\"reasons\":[\"all checks passed\"],\"patch_hints\":[],\"confidence\":0.92}\nJSON",
-		JudgeCommand:       "echo QUALIFIED",
 		Shell:              "sh",
 	}
 	r, err := Run(base, cfg)

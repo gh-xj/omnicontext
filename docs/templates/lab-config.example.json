@@ -6,6 +6,5 @@
   "planner_command": "echo '- inspect failures\\n- patch minimal\\n- re-verify' > \"$OCX_LAB_PLAN_FILE\"",
   "implementer_command": "echo 'implementer placeholder' > \"$OCX_LAB_IMPL_FILE\"",
   "verify_command": "go test ./...",
-  "inspector_command": "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\\n{\"verdict\":\"QUALIFIED\",\"reasons\":[\"all checks passed\"],\"patch_hints\":[],\"confidence\":0.95}\\nJSON",
-  "judge_command": "if grep -q 'FAIL' \"$OCX_LAB_ITER_DIR/outbox/verify.log\"; then echo NOT_QUALIFIED; exit 1; else echo QUALIFIED; fi"
+  "inspector_command": "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\\n{\"verdict\":\"QUALIFIED\",\"reasons\":[\"all checks passed\"],\"patch_hints\":[],\"confidence\":0.95}\\nJSON"
 }

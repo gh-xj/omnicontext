@@ -70,6 +70,7 @@ JSON" \
   --auto-commit
 ```
 3. Inspect artifacts generated under `<data-dir>/evolve/runs/<run-id>/`
+   - start from `review-checklist.md` for the human verification path
 4. Human reviews `pr-title.txt` and `pr-body.md`, then opens/reviews PR.
 
 Inspector output schema (`outbox/inspector.json`, required):
