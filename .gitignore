@@ -3,3 +3,4 @@ bin/
 
 # Local data
 .ocx/
+/ocx
