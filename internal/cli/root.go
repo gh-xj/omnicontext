@@ -73,6 +73,10 @@ func NewRootCmd() *cobra.Command {
 	importCmd.AddCommand(newImportSubCmd("codex", openStore))
 	root.AddCommand(importCmd)
 
+	ingestCmd := &cobra.Command{Use: "ingest", Short: "Ingest sessions from default sources"}
+	ingestCmd.AddCommand(newIngestAutoCmd(openStore))
+	root.AddCommand(ingestCmd)
+
 	contextCmd := &cobra.Command{Use: "context", Short: "Context operations"}
 	contextCmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -202,40 +206,135 @@ func newImportSubCmd(kind string, openStore func() (*store.Store, error)) *cobra
 				return err
 			}
 			defer st.Close()
-			sessions, err := adapters.Parse(kind, p)
+			inserted, parsed, skipped, err := importFromPath(st, kind, p)
 			if err != nil {
 				return err
 			}
-			inserted := 0
-			for _, s := range sessions {
-				turns := make([]store.TurnInput, 0, len(s.Turns))
-				for _, t := range s.Turns {
-					turns = append(turns, store.TurnInput{
-						UserMessage:      t.UserMessage,
-						AssistantSummary: t.AssistantSummary,
-						Timestamp:        t.Timestamp,
-					})
-				}
-				_, err := st.InsertImportedSession(store.SessionInput{
-					SessionID:      s.SessionID,
-					SessionType:    s.SessionType,
-					SessionPath:    s.SessionPath,
-					WorkspacePath:  s.WorkspacePath,
-					StartedAt:      s.StartedAt,
-					LastActivityAt: s.LastActivityAt,
-					SessionTitle:   s.SessionTitle,
-					SessionSummary: s.SessionSummary,
-					Metadata:       s.Metadata,
-				}, turns)
-				if err != nil {
-					continue
-				}
-				inserted++
-			}
-			fmt.Printf("imported %s sessions: %d/%d\n", kind, inserted, len(sessions))
+			fmt.Printf("imported %s sessions: %d/%d (skipped=%d)\n", kind, inserted, parsed, skipped)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&p, "path", "", "Source session path")
 	return cmd
+}
+
+func newIngestAutoCmd(openStore func() (*store.Store, error)) *cobra.Command {
+	var claudePath string
+	var codexPath string
+	cmd := &cobra.Command{
+		Use:   "auto",
+		Short: "Auto-ingest from ~/.claude/projects and ~/.codex/sessions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if claudePath == "" || codexPath == "" {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				if claudePath == "" {
+					claudePath = filepath.Join(home, ".claude", "projects")
+				}
+				if codexPath == "" {
+					codexPath = filepath.Join(home, ".codex", "sessions")
+				}
+			}
+
+			st, err := openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+
+			type result struct {
+				kind     string
+				path     string
+				parsed   int
+				inserted int
+				skipped  int
+				err      error
+			}
+			results := make([]result, 0, 2)
+			for _, src := range []struct {
+				kind string
+				path string
+			}{
+				{kind: "claude", path: claudePath},
+				{kind: "codex", path: codexPath},
+			} {
+				if _, err := os.Stat(src.path); err != nil {
+					results = append(results, result{kind: src.kind, path: src.path, err: err})
+					continue
+				}
+				inserted, parsed, skipped, err := importFromPath(st, src.kind, src.path)
+				results = append(results, result{
+					kind:     src.kind,
+					path:     src.path,
+					parsed:   parsed,
+					inserted: inserted,
+					skipped:  skipped,
+					err:      err,
+				})
+			}
+
+			totalParsed, totalInserted, totalSkipped := 0, 0, 0
+			for _, r := range results {
+				if r.err != nil {
+					fmt.Printf("%s: path=%s error=%v\n", r.kind, r.path, r.err)
+					continue
+				}
+				fmt.Printf("%s: imported=%d/%d skipped=%d path=%s\n", r.kind, r.inserted, r.parsed, r.skipped, r.path)
+				totalParsed += r.parsed
+				totalInserted += r.inserted
+				totalSkipped += r.skipped
+			}
+			fmt.Printf("total: imported=%d/%d skipped=%d\n", totalInserted, totalParsed, totalSkipped)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&claudePath, "claude-path", "", "Claude sessions root (default: ~/.claude/projects)")
+	cmd.Flags().StringVar(&codexPath, "codex-path", "", "Codex sessions root (default: ~/.codex/sessions)")
+	return cmd
+}
+
+func importFromPath(st *store.Store, kind, p string) (inserted int, parsed int, skipped int, err error) {
+	sessions, err := adapters.Parse(kind, p)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	parsed = len(sessions)
+	for _, s := range sessions {
+		exists, exErr := st.SessionExistsByPath(s.SessionPath)
+		if exErr != nil {
+			skipped++
+			continue
+		}
+		if exists {
+			skipped++
+			continue
+		}
+		turns := make([]store.TurnInput, 0, len(s.Turns))
+		for _, t := range s.Turns {
+			turns = append(turns, store.TurnInput{
+				UserMessage:      t.UserMessage,
+				AssistantSummary: t.AssistantSummary,
+				Timestamp:        t.Timestamp,
+			})
+		}
+		_, insErr := st.InsertImportedSession(store.SessionInput{
+			SessionID:      s.SessionID,
+			SessionType:    s.SessionType,
+			SessionPath:    s.SessionPath,
+			WorkspacePath:  s.WorkspacePath,
+			StartedAt:      s.StartedAt,
+			LastActivityAt: s.LastActivityAt,
+			SessionTitle:   s.SessionTitle,
+			SessionSummary: s.SessionSummary,
+			Metadata:       s.Metadata,
+		}, turns)
+		if insErr != nil {
+			skipped++
+			continue
+		}
+		inserted++
+	}
+	return inserted, parsed, skipped, nil
 }

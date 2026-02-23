@@ -55,3 +55,23 @@ func TestInsertImportedSessionWithTurns(t *testing.T) {
 		t.Fatalf("turns = %d", turns)
 	}
 }
+
+func TestSessionExistsByPath(t *testing.T) {
+	st, dir := newTestStore(t)
+	defer st.Close()
+	path := filepath.Join(dir, "s2.jsonl")
+	if _, err := st.InsertImportedSession(SessionInput{
+		SessionID:   "codex-test-2",
+		SessionType: "codex",
+		SessionPath: path,
+	}, nil); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	exists, err := st.SessionExistsByPath(path)
+	if err != nil {
+		t.Fatalf("exists err: %v", err)
+	}
+	if !exists {
+		t.Fatalf("expected path to exist")
+	}
+}

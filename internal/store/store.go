@@ -250,6 +250,14 @@ func (s *Store) CountTurnsForSession(sessionID string) (int, error) {
 	return n, nil
 }
 
+func (s *Store) SessionExistsByPath(sessionPath string) (bool, error) {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE session_path = ?`, sessionPath).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func (s *Store) ListContexts() ([]Context, error) {
 	rows, err := s.DB.Query(`SELECT id, name, COALESCE(summary,''), created_at, updated_at FROM contexts ORDER BY updated_at DESC, id`)
 	if err != nil {
