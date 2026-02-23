@@ -3,7 +3,9 @@ package cli
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/gh-xj/omnicontext/internal/adapters"
 	"github.com/gh-xj/omnicontext/internal/store"
 )
 
@@ -50,7 +52,7 @@ func TestImportFromPathDryRunDoesNotWrite(t *testing.T) {
 	defer st.Close()
 
 	fixtureDir := filepath.Join("..", "adapters", "testdata")
-	inserted, parsed, skipped, err := importFromPathWithOptions(st, "codex", fixtureDir, true)
+	inserted, parsed, skipped, err := importFromPathWithOptions(st, "codex", fixtureDir, importOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("dry-run import: %v", err)
 	}
@@ -63,5 +65,31 @@ func TestImportFromPathDryRunDoesNotWrite(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("dry-run should not write sessions, got=%d", n)
+	}
+}
+
+func TestFilterSessionsForImportMaxAndSince(t *testing.T) {
+	s1 := adapters.Session{SessionID: "s1", LastActivityAt: "2026-01-01T00:00:00Z"}
+	s2 := adapters.Session{SessionID: "s2", LastActivityAt: "2026-02-01T00:00:00Z"}
+	s3 := adapters.Session{SessionID: "s3", LastActivityAt: "2026-03-01T00:00:00Z"}
+	since := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	out := filterSessionsForImport([]adapters.Session{s1, s2, s3}, importOptions{
+		Since:       &since,
+		MaxSessions: 1,
+	})
+	if len(out) != 1 {
+		t.Fatalf("len(out) = %d", len(out))
+	}
+	if out[0].SessionID != "s3" {
+		t.Fatalf("expected most recent s3, got %s", out[0].SessionID)
+	}
+}
+
+func TestParseSinceDate(t *testing.T) {
+	if _, err := parseSinceDate("2026-02-01"); err != nil {
+		t.Fatalf("expected valid date: %v", err)
+	}
+	if _, err := parseSinceDate("2026/02/01"); err == nil {
+		t.Fatalf("expected invalid date error")
 	}
 }

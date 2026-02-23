@@ -193,3 +193,36 @@ func TestListAndGetSessions(t *testing.T) {
 		t.Fatalf("unexpected turn ordering: %+v", turns)
 	}
 }
+
+func TestSearchSessionsAndContextRows(t *testing.T) {
+	st, dir := newTestStore(t)
+	defer st.Close()
+
+	_, err := st.InsertImportedSession(SessionInput{
+		SessionID:      "codex-search-1",
+		SessionType:    "codex",
+		SessionPath:    filepath.Join(dir, "codex-search-1.jsonl"),
+		WorkspacePath:  "/tmp/ws-search",
+		SessionTitle:   "ZeroClaw Debug",
+		SessionSummary: "Investigate timeout issue",
+	}, []TurnInput{{UserMessage: "u", AssistantSummary: "a", Timestamp: "2026-01-01T00:00:01Z"}})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	rows, err := st.SearchSessions("timeout", 10)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "codex-search-1" {
+		t.Fatalf("unexpected search rows: %+v", rows)
+	}
+
+	ctxRows, err := st.SessionsForContextRows("default")
+	if err != nil {
+		t.Fatalf("context rows: %v", err)
+	}
+	if len(ctxRows) != 1 {
+		t.Fatalf("context rows len = %d", len(ctxRows))
+	}
+}

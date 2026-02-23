@@ -350,6 +350,38 @@ func (s *Store) SessionsForContext(id string) ([]map[string]string, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) SessionsForContextRows(contextID string) ([]SessionRow, error) {
+	rows, err := s.DB.Query(`
+		SELECT s.id, s.session_type, s.session_path, COALESCE(s.workspace_path,''), COALESCE(s.started_at,''), COALESCE(s.last_activity_at,''),
+		       COALESCE(s.session_title,''), COALESCE(s.session_summary,''), COALESCE(t.turn_count,0)
+		FROM context_sessions cs
+		JOIN sessions s ON s.id = cs.session_id
+		LEFT JOIN (
+			SELECT session_id, COUNT(*) AS turn_count
+			FROM turns
+			GROUP BY session_id
+		) t ON t.session_id = s.id
+		WHERE cs.context_id = ?
+		ORDER BY s.last_activity_at DESC, s.id
+	`, contextID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SessionRow, 0)
+	for rows.Next() {
+		var srow SessionRow
+		if err := rows.Scan(
+			&srow.ID, &srow.SessionType, &srow.SessionPath, &srow.WorkspacePath, &srow.StartedAt,
+			&srow.LastActivityAt, &srow.SessionTitle, &srow.SessionSummary, &srow.TurnCount,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, srow)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListSessions(limit int) ([]SessionRow, error) {
 	if limit <= 0 {
 		limit = 100
@@ -366,6 +398,46 @@ func (s *Store) ListSessions(limit int) ([]SessionRow, error) {
 		ORDER BY s.last_activity_at DESC, s.id
 		LIMIT ?
 	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SessionRow, 0)
+	for rows.Next() {
+		var srow SessionRow
+		if err := rows.Scan(
+			&srow.ID, &srow.SessionType, &srow.SessionPath, &srow.WorkspacePath, &srow.StartedAt,
+			&srow.LastActivityAt, &srow.SessionTitle, &srow.SessionSummary, &srow.TurnCount,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, srow)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SearchSessions(query string, limit int) ([]SessionRow, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	q := "%" + strings.ToLower(strings.TrimSpace(query)) + "%"
+	rows, err := s.DB.Query(`
+		SELECT s.id, s.session_type, s.session_path, COALESCE(s.workspace_path,''), COALESCE(s.started_at,''), COALESCE(s.last_activity_at,''),
+		       COALESCE(s.session_title,''), COALESCE(s.session_summary,''), COALESCE(t.turn_count,0)
+		FROM sessions s
+		LEFT JOIN (
+			SELECT session_id, COUNT(*) AS turn_count
+			FROM turns
+			GROUP BY session_id
+		) t ON t.session_id = s.id
+		WHERE LOWER(s.id) LIKE ?
+		   OR LOWER(COALESCE(s.session_title,'')) LIKE ?
+		   OR LOWER(COALESCE(s.session_summary,'')) LIKE ?
+		   OR LOWER(COALESCE(s.session_path,'')) LIKE ?
+		   OR LOWER(COALESCE(s.workspace_path,'')) LIKE ?
+		ORDER BY s.last_activity_at DESC, s.id
+		LIMIT ?
+	`, q, q, q, q, q, limit)
 	if err != nil {
 		return nil, err
 	}

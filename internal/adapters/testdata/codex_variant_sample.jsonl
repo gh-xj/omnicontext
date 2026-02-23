@@ -1,0 +1,5 @@
+{"timestamp":"2026-02-01T00:00:00Z","type":"session_meta","payload":{"id":"codex-variant-1","cwd":"/tmp/variant"}}
+{"timestamp":"2026-02-01T00:00:01Z","type":"event_msg","payload":{"type":"user_message","message":"hello from event"}}
+{"timestamp":"2026-02-01T00:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","message":"assistant via message field"}}
+{"timestamp":"2026-02-01T00:00:03Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","input_text":"user via input_text"}]}}
+{"timestamp":"2026-02-01T00:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","output_text":"assistant via output_text"}]}}

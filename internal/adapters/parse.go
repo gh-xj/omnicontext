@@ -102,7 +102,7 @@ type codexPayload struct {
 	Role    string      `json:"role"`
 	ID      string      `json:"id"`
 	CWD     string      `json:"cwd"`
-	Message string      `json:"message"`
+	Message interface{} `json:"message"`
 	Content interface{} `json:"content"`
 }
 
@@ -214,6 +214,20 @@ func parseCodexFile(path string) (Session, error) {
 				s.WorkspacePath = p.CWD
 			}
 		}
+		if env.Type == "event_msg" && len(env.Payload) > 0 {
+			var ev struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(env.Payload, &ev)
+			if ev.Type == "user_message" && strings.TrimSpace(ev.Message) != "" {
+				if pendingUser != "" {
+					s.Turns = append(s.Turns, Turn{UserMessage: pendingUser, Timestamp: env.Timestamp})
+				}
+				pendingUser = strings.TrimSpace(ev.Message)
+			}
+			continue
+		}
 		if env.Type != "response_item" || len(env.Payload) == 0 {
 			continue
 		}
@@ -231,6 +245,9 @@ func parseCodexFile(path string) (Session, error) {
 			s.WorkspacePath = p.CWD
 		}
 		text := flattenContent(p.Content)
+		if strings.TrimSpace(text) == "" {
+			text = flattenContent(p.Message)
+		}
 		if p.Role == "user" {
 			if pendingUser != "" {
 				s.Turns = append(s.Turns, Turn{UserMessage: pendingUser, Timestamp: env.Timestamp})
@@ -261,6 +278,8 @@ func parseCodexFile(path string) (Session, error) {
 
 func flattenContent(v interface{}) string {
 	switch t := v.(type) {
+	case nil:
+		return ""
 	case string:
 		return t
 	case []interface{}:
@@ -271,6 +290,14 @@ func flattenContent(v interface{}) string {
 					parts = append(parts, x)
 					continue
 				}
+				if x, ok := m["input_text"].(string); ok && x != "" {
+					parts = append(parts, x)
+					continue
+				}
+				if x, ok := m["output_text"].(string); ok && x != "" {
+					parts = append(parts, x)
+					continue
+				}
 				if x, ok := m["content"].(string); ok && x != "" {
 					parts = append(parts, x)
 					continue
@@ -278,6 +305,21 @@ func flattenContent(v interface{}) string {
 			}
 		}
 		return strings.Join(parts, "\n")
+	case map[string]interface{}:
+		if x, ok := t["text"].(string); ok && x != "" {
+			return x
+		}
+		if x, ok := t["input_text"].(string); ok && x != "" {
+			return x
+		}
+		if x, ok := t["output_text"].(string); ok && x != "" {
+			return x
+		}
+		if x, ok := t["content"].(string); ok && x != "" {
+			return x
+		}
+		b, _ := json.Marshal(t)
+		return string(b)
 	default:
 		b, _ := json.Marshal(t)
 		return string(b)
