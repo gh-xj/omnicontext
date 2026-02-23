@@ -23,6 +23,9 @@ func newEvolveCmd(dataDirProvider func() string) *cobra.Command {
 			if cfg.Goal == "" {
 				return errors.New("--goal is required")
 			}
+			if cfg.InspectorCommand == "" {
+				return errors.New("--inspector is required")
+			}
 			if cfg.Workspace == "" {
 				wd, _ := os.Getwd()
 				cfg.Workspace = wd
@@ -54,6 +57,7 @@ func newEvolveCmd(dataDirProvider func() string) *cobra.Command {
 	run.Flags().StringVar(&cfg.ContextDesigner, "context-designer", "", "Context designer command (optional)")
 	run.Flags().StringVar(&cfg.LauncherCommand, "launcher", "", "Agent launcher command (optional)")
 	run.Flags().StringVar(&cfg.VerifyCommand, "verify", "go vet ./... && go test ./... && go build ./cmd/ocx", "Verification command")
+	run.Flags().StringVar(&cfg.InspectorCommand, "inspector", "", "Inspector command (required)")
 	run.Flags().StringVar(&cfg.PlannerCommand, "planner", "", "Planner command (optional)")
 	run.Flags().StringVar(&cfg.ImplementerCommand, "implementer", "", "Implementer command (optional)")
 	run.Flags().StringVar(&cfg.JudgeCommand, "judge", "", "Judge command (optional; defaults to verifier log-based)")

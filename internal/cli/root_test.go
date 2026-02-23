@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,5 +92,51 @@ func TestParseSinceDate(t *testing.T) {
 	}
 	if _, err := parseSinceDate("2026/02/01"); err == nil {
 		t.Fatalf("expected invalid date error")
+	}
+}
+
+func TestLabRunInspectorFlagRegistered(t *testing.T) {
+	root := NewRootCmd()
+	cmd, _, err := root.Find([]string{"lab", "run"})
+	if err != nil {
+		t.Fatalf("find lab run: %v", err)
+	}
+	if cmd.Flags().Lookup("inspector") == nil {
+		t.Fatalf("expected --inspector flag on lab run")
+	}
+}
+
+func TestEvolveRunInspectorFlagRegistered(t *testing.T) {
+	root := NewRootCmd()
+	cmd, _, err := root.Find([]string{"evolve", "run"})
+	if err != nil {
+		t.Fatalf("find evolve run: %v", err)
+	}
+	if cmd.Flags().Lookup("inspector") == nil {
+		t.Fatalf("expected --inspector flag on evolve run")
+	}
+}
+
+func TestLabRunRequiresInspectorCommand(t *testing.T) {
+	root := NewRootCmd()
+	root.SetArgs([]string{"lab", "run", "--goal", "g", "--verify", "exit 0"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("expected missing inspector error")
+	}
+	if !strings.Contains(err.Error(), "inspector command is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEvolveRunRequiresInspectorFlag(t *testing.T) {
+	root := NewRootCmd()
+	root.SetArgs([]string{"evolve", "run", "--goal", "g"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("expected missing inspector error")
+	}
+	if !strings.Contains(err.Error(), "--inspector is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -22,6 +22,7 @@ type Config struct {
 	ContextDesigner    string
 	LauncherCommand    string
 	VerifyCommand      string
+	InspectorCommand   string
 	PlannerCommand     string
 	ImplementerCommand string
 	JudgeCommand       string
@@ -52,6 +53,9 @@ func Run(cfg Config) (Report, error) {
 	}
 	if strings.TrimSpace(cfg.VerifyCommand) == "" {
 		cfg.VerifyCommand = "go vet ./... && go test ./... && go build ./cmd/ocx"
+	}
+	if strings.TrimSpace(cfg.InspectorCommand) == "" {
+		return Report{}, errors.New("inspector command is required")
 	}
 	if cfg.MaxIterations <= 0 {
 		cfg.MaxIterations = 3
@@ -107,6 +111,7 @@ func Run(cfg Config) (Report, error) {
 		PlannerCommand:     cfg.PlannerCommand,
 		ImplementerCommand: cfg.ImplementerCommand,
 		VerifyCommand:      cfg.VerifyCommand,
+		InspectorCommand:   cfg.InspectorCommand,
 		JudgeCommand:       judge,
 	})
 	if err != nil {

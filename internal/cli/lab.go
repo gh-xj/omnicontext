@@ -54,6 +54,7 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 	var planner string
 	var implementer string
 	var verify string
+	var inspector string
 	var judge string
 	var shell string
 	var configPath string
@@ -96,6 +97,9 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 			if verify != "" {
 				cfg.VerifyCommand = verify
 			}
+			if inspector != "" {
+				cfg.InspectorCommand = inspector
+			}
 			if judge != "" {
 				cfg.JudgeCommand = judge
 			}
@@ -110,6 +114,9 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 			}
 			if cfg.VerifyCommand == "" {
 				return errors.New("verify command is required (use --verify or --config)")
+			}
+			if cfg.InspectorCommand == "" {
+				return errors.New("inspector command is required (use --inspector or --config)")
 			}
 
 			report, err := lab.Run(resolveLabDir(dataDirProvider(), runDirRun), cfg)
@@ -140,6 +147,7 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 	runCmd.Flags().StringVar(&planner, "planner", "", "Planner command")
 	runCmd.Flags().StringVar(&implementer, "implementer", "", "Implementer command")
 	runCmd.Flags().StringVar(&verify, "verify", "", "Verification command (required)")
+	runCmd.Flags().StringVar(&inspector, "inspector", "", "Inspector command (required)")
 	runCmd.Flags().StringVar(&judge, "judge", "", "Judge command (outputs QUALIFIED / NOT_QUALIFIED)")
 	runCmd.Flags().StringVar(&shell, "shell", "", "Shell executable for command execution")
 	runCmd.Flags().StringVar(&workspace, "workspace", "", "Workspace to run commands in (default: cwd)")

@@ -45,8 +45,8 @@ go test ./...
 ./bin/ocx session export csv --out ./sessions.csv --limit 100
 ./bin/ocx context export csv default --out ./default-context.csv
 ./bin/ocx lab init
-./bin/ocx lab run --config ./docs/templates/lab-config.example.json
-./bin/ocx evolve run --goal \"fix parser edge case\" --max-iterations 3
+./bin/ocx lab run --config ./docs/templates/lab-config.example.json --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''\n{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}\nJSON'
+./bin/ocx evolve run --goal \"fix parser edge case\" --max-iterations 3 --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''\n{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}\nJSON'
 ./bin/ocx share export default --out ./default.ocxpack
 ./bin/ocx share import ./default.ocxpack
 ./bin/ocx doctor
@@ -64,10 +64,22 @@ Expected workflow:
   --context-designer "printf '# Context Pack\n- stable acceptance\n' > \"$OCX_LAB_CONTEXT_PACK_FILE\"" \
   --launcher "echo 'launch external agent with context-pack' > \"$OCX_LAB_ITER_DIR/outbox/launcher.log\"" \
   --verify "go vet ./... && go test ./... && go build ./cmd/ocx" \
+  --inspector "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'
+{\"verdict\":\"QUALIFIED\",\"reasons\":[\"all checks passed\"],\"patch_hints\":[],\"confidence\":0.95}
+JSON" \
   --auto-commit
 ```
 3. Inspect artifacts generated under `<data-dir>/evolve/runs/<run-id>/`
 4. Human reviews `pr-title.txt` and `pr-body.md`, then opens/reviews PR.
+
+Inspector output schema (`outbox/inspector.json`, required):
+- `verdict`: `QUALIFIED` or `NOT_QUALIFIED`
+- `reasons`: array of strings
+- `patch_hints`: array of strings (used for next-step hints on failure)
+- `confidence`: number in `[0,1]`
+
+Inspector input artifact:
+- `inbox/session-ref.json` (workspace/run/iteration reference for the inspector command)
 
 ## Data Dir
 Default: `~/.ocx`

@@ -22,6 +22,7 @@ type Config struct {
 	PlannerCommand     string `json:"planner_command"`
 	ImplementerCommand string `json:"implementer_command"`
 	VerifyCommand      string `json:"verify_command"`
+	InspectorCommand   string `json:"inspector_command"`
 	JudgeCommand       string `json:"judge_command"`
 	Shell              string `json:"shell"`
 }
@@ -35,11 +36,22 @@ type IterationResult struct {
 	PlannerCode   int       `json:"planner_code"`
 	ImplementCode int       `json:"implement_code"`
 	VerifyCode    int       `json:"verify_code"`
+	InspectorCode int       `json:"inspector_code"`
 	JudgeCode     int       `json:"judge_code"`
 	ContextPack   string    `json:"context_pack"`
 	ContextHash   string    `json:"context_pack_sha256"`
+	InspectorPath string    `json:"inspector_path"`
+	InspectorOK   bool      `json:"inspector_ok"`
+	Inspector     string    `json:"inspector_verdict"`
 	Qualified     bool      `json:"qualified"`
 	Reason        string    `json:"reason"`
+}
+
+type inspectorOutput struct {
+	Verdict    string   `json:"verdict"`
+	Reasons    []string `json:"reasons"`
+	PatchHints []string `json:"patch_hints"`
+	Confidence float64  `json:"confidence"`
 }
 
 type RunReport struct {
@@ -88,6 +100,7 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 		Goal:      cfg.Goal,
 		Config:    cfg,
 	}
+	var nextStepHints []string
 
 	for i := 1; i <= cfg.MaxIterations; i++ {
 		iter := IterationResult{Iteration: i, StartedAt: time.Now().UTC()}
@@ -101,19 +114,32 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 
 		_ = os.WriteFile(filepath.Join(iterDir, "inbox", "goal.md"), []byte(cfg.Goal+"\n"), 0o644)
 		_ = os.WriteFile(filepath.Join(iterDir, "inbox", "constraints.md"), []byte("Keep changes minimal, pass verification, and stop only when qualified.\n"), 0o644)
+		if len(nextStepHints) > 0 {
+			_ = writeNextStepHints(filepath.Join(iterDir, "inbox", "next-step-hints.md"), nextStepHints)
+		}
 		contextPackPath := filepath.Join(iterDir, "inbox", "context-pack.md")
 		_ = os.WriteFile(contextPackPath, []byte(defaultContextPack(cfg.Goal, filepath.Join(iterDir, "inbox", "constraints.md"))), 0o644)
+		verifyLogPath := filepath.Join(iterDir, "outbox", "verify.log")
+		inspectorLogPath := filepath.Join(iterDir, "outbox", "inspector.log")
+		inspectorPath := filepath.Join(iterDir, "outbox", "inspector.json")
+		sessionRefPath := filepath.Join(iterDir, "inbox", "session-ref.json")
+		sessionPathHintPath := filepath.Join(iterDir, "outbox", "session-path.txt")
 
 		env := map[string]string{
-			"OCX_LAB_RUN_DIR":           runDir,
-			"OCX_LAB_ITER_DIR":          iterDir,
-			"OCX_LAB_WORKSPACE":         cfg.Workspace,
-			"OCX_LAB_GOAL_FILE":         filepath.Join(iterDir, "inbox", "goal.md"),
-			"OCX_LAB_CONSTRAINTS_FILE":  filepath.Join(iterDir, "inbox", "constraints.md"),
-			"OCX_LAB_CONTEXT_PACK_FILE": contextPackPath,
-			"OCX_LAB_PLAN_FILE":         filepath.Join(iterDir, "outbox", "planner.md"),
-			"OCX_LAB_IMPL_FILE":         filepath.Join(iterDir, "outbox", "implementer.md"),
-			"OCX_LAB_JUDGE_FILE":        filepath.Join(iterDir, "outbox", "judge.md"),
+			"OCX_LAB_RUN_DIR":             runDir,
+			"OCX_LAB_ITER_DIR":            iterDir,
+			"OCX_LAB_WORKSPACE":           cfg.Workspace,
+			"OCX_LAB_GOAL_FILE":           filepath.Join(iterDir, "inbox", "goal.md"),
+			"OCX_LAB_CONSTRAINTS_FILE":    filepath.Join(iterDir, "inbox", "constraints.md"),
+			"OCX_LAB_CONTEXT_PACK_FILE":   contextPackPath,
+			"OCX_LAB_PLAN_FILE":           filepath.Join(iterDir, "outbox", "planner.md"),
+			"OCX_LAB_IMPL_FILE":           filepath.Join(iterDir, "outbox", "implementer.md"),
+			"OCX_LAB_JUDGE_FILE":          filepath.Join(iterDir, "outbox", "judge.md"),
+			"OCX_LAB_INSPECTOR_JSON_FILE": inspectorPath,
+			"OCX_LAB_INSPECTOR_LOG_FILE":  inspectorLogPath,
+			"OCX_LAB_VERIFY_LOG_FILE":     verifyLogPath,
+			"OCX_LAB_SESSION_REF_FILE":    sessionRefPath,
+			"OCX_LAB_SESSION_PATH_FILE":   sessionPathHintPath,
 		}
 
 		if strings.TrimSpace(cfg.ContextDesigner) != "" {
@@ -147,7 +173,22 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 
 		vcode, vout := runShell(cfg.Shell, cfg.Workspace, cfg.VerifyCommand, env)
 		iter.VerifyCode = vcode
-		_ = os.WriteFile(filepath.Join(iterDir, "outbox", "verify.log"), vout, 0o644)
+		_ = os.WriteFile(verifyLogPath, vout, 0o644)
+		sessionPath := readSessionPathHint(sessionPathHintPath)
+		_ = writeSessionRef(sessionRefPath, cfg.Workspace, runID, i, sessionPath)
+		if strings.TrimSpace(cfg.InspectorCommand) != "" {
+			icode, iout := runShell(cfg.Shell, cfg.Workspace, cfg.InspectorCommand, env)
+			iter.InspectorCode = icode
+			_ = os.WriteFile(inspectorLogPath, iout, 0o644)
+		} else {
+			_ = os.WriteFile(inspectorLogPath, []byte("inspector command not configured\n"), 0o644)
+		}
+		iter.InspectorPath = inspectorPath
+		inspector, inspectorErr := parseInspectorOutput(inspectorPath)
+		if inspectorErr == nil {
+			iter.InspectorOK = true
+			iter.Inspector = inspector.Verdict
+		}
 
 		qualified := false
 		reason := "verification failed"
@@ -155,17 +196,31 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 			jcode, jout := runShell(cfg.Shell, cfg.Workspace, cfg.JudgeCommand, env)
 			iter.JudgeCode = jcode
 			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "judge.log"), jout, 0o644)
-			if jcode == 0 && strings.Contains(strings.ToUpper(string(jout)), "QUALIFIED") {
-				qualified = true
-				reason = "judge accepted"
-			} else if vcode == 0 {
-				reason = "verification passed but judge rejected"
-			} else {
-				reason = "verification and judge failed"
-			}
-		} else if vcode == 0 {
+		}
+
+		if vcode == 0 && iter.InspectorCode == 0 && inspectorErr == nil && inspector.Verdict == "QUALIFIED" {
 			qualified = true
-			reason = "verification passed"
+			reason = "verification and inspector qualified"
+		} else {
+			switch {
+			case vcode != 0 && iter.InspectorCode != 0:
+				reason = fmt.Sprintf("verification failed and inspector command failed (exit %d)", iter.InspectorCode)
+			case vcode != 0 && inspectorErr != nil:
+				reason = fmt.Sprintf("verification failed and inspector schema invalid: %v", inspectorErr)
+			case vcode != 0:
+				reason = "verification failed"
+			case iter.InspectorCode != 0:
+				reason = fmt.Sprintf("inspector command failed (exit %d)", iter.InspectorCode)
+			case inspectorErr != nil:
+				reason = fmt.Sprintf("inspector schema invalid: %v", inspectorErr)
+			case inspector.Verdict != "QUALIFIED":
+				reason = fmt.Sprintf("inspector verdict %s", inspector.Verdict)
+			}
+		}
+		if !qualified && inspectorErr == nil && len(inspector.PatchHints) > 0 {
+			nextStepHints = append([]string{}, inspector.PatchHints...)
+		} else {
+			nextStepHints = nil
 		}
 
 		iter.Qualified = qualified
@@ -214,8 +269,8 @@ func runShell(shell, cwd, command string, extraEnv map[string]string) (int, []by
 
 func writeIterationSummary(iterDir string, iter IterationResult) {
 	_ = os.WriteFile(filepath.Join(iterDir, "summary.md"), []byte(fmt.Sprintf(
-		"# Iteration %d\n\n- Qualified: %v\n- Reason: %s\n- Context designer exit: %d\n- Launcher exit: %d\n- Planner exit: %d\n- Implementer exit: %d\n- Verify exit: %d\n- Judge exit: %d\n- Context pack: %s\n- Context SHA256: %s\n",
-		iter.Iteration, iter.Qualified, iter.Reason, iter.ContextCode, iter.LauncherCode, iter.PlannerCode, iter.ImplementCode, iter.VerifyCode, iter.JudgeCode, iter.ContextPack, iter.ContextHash,
+		"# Iteration %d\n\n- Qualified: %v\n- Reason: %s\n- Context designer exit: %d\n- Launcher exit: %d\n- Planner exit: %d\n- Implementer exit: %d\n- Verify exit: %d\n- Inspector exit: %d\n- Judge exit: %d\n- Inspector schema valid: %v\n- Inspector verdict: %s\n- Inspector file: %s\n- Context pack: %s\n- Context SHA256: %s\n",
+		iter.Iteration, iter.Qualified, iter.Reason, iter.ContextCode, iter.LauncherCode, iter.PlannerCode, iter.ImplementCode, iter.VerifyCode, iter.InspectorCode, iter.JudgeCode, iter.InspectorOK, iter.Inspector, iter.InspectorPath, iter.ContextPack, iter.ContextHash,
 	)), 0o644)
 }
 
@@ -244,5 +299,75 @@ func hashFileSHA256(path string) string {
 }
 
 func defaultContextPack(goal, constraintsPath string) string {
-	return fmt.Sprintf("# Context Pack\n\n## Goal\n%s\n\n## Constraints File\n%s\n\n## Acceptance\n- Verification command exits 0.\n- Judge emits QUALIFIED.\n", goal, constraintsPath)
+	return fmt.Sprintf("# Context Pack\n\n## Goal\n%s\n\n## Constraints File\n%s\n\n## Acceptance\n- Verification command exits 0.\n- Inspector emits QUALIFIED with valid schema.\n", goal, constraintsPath)
+}
+
+func parseInspectorOutput(path string) (inspectorOutput, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return inspectorOutput{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	var out inspectorOutput
+	if err := json.Unmarshal(b, &out); err != nil {
+		return inspectorOutput{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	out.Verdict = strings.ToUpper(strings.TrimSpace(out.Verdict))
+	switch out.Verdict {
+	case "QUALIFIED", "NOT_QUALIFIED":
+	default:
+		return inspectorOutput{}, fmt.Errorf("verdict must be QUALIFIED or NOT_QUALIFIED")
+	}
+	if out.Reasons == nil {
+		return inspectorOutput{}, fmt.Errorf("reasons is required")
+	}
+	if out.PatchHints == nil {
+		return inspectorOutput{}, fmt.Errorf("patch_hints is required")
+	}
+	if out.Confidence < 0 || out.Confidence > 1 {
+		return inspectorOutput{}, fmt.Errorf("confidence must be between 0 and 1")
+	}
+	return out, nil
+}
+
+func writeNextStepHints(path string, hints []string) error {
+	var b strings.Builder
+	b.WriteString("# Next Step Hints\n\n")
+	for _, hint := range hints {
+		trimmed := strings.TrimSpace(hint)
+		if trimmed == "" {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(trimmed)
+		b.WriteByte('\n')
+	}
+	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func writeSessionRef(path, workspace, runID string, iteration int, sessionPath string) error {
+	payload := struct {
+		Workspace   string `json:"workspace"`
+		RunID       string `json:"run_id"`
+		Iteration   int    `json:"iteration"`
+		SessionPath string `json:"session_path"`
+	}{
+		Workspace:   workspace,
+		RunID:       runID,
+		Iteration:   iteration,
+		SessionPath: sessionPath,
+	}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return os.WriteFile(path, b, 0o644)
+}
+
+func readSessionPathHint(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
