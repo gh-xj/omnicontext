@@ -1,17 +1,12 @@
 # OmniContext
 
-Local-first context memory + verification-loop tooling for human and AI collaboration.
+<p align="center">
+  <img src="./assets/logo/omnicontext-logo.svg" alt="OmniContext logo" width="760" />
+</p>
 
-## Why
+Local-first context memory and session tooling built with Go + SQLite.
 
-OmniContext is designed around one principle: keep all evidence on disk so humans can verify fast.
-
-- ingest session data from local tools (Claude/Codex)
-- query/share context from a local SQLite store
-- run a local verification loop (`lab` / `evolve`)
-- hand off a PR with reproducible artifacts for human review
-
-## First 5 Minutes (User-First)
+## First 5 Minutes
 
 ```bash
 go build -o bin/ocx ./cmd/ocx
@@ -25,26 +20,26 @@ go build -o bin/ocx ./cmd/ocx
 ./bin/ocx session search --query timeout --limit 20
 ```
 
-If this works, you already have a usable local context system.
+If this works, your local context system is ready.
 
-## Filesystem Mental Model
+## Filesystem Guide
 
-### 1) Data root
+Default data directory:
 
-Default data dir is `~/.ocx` (override with `--data-dir`).
+- `~/.ocx`
+
+Use a custom data directory:
 
 ```bash
 ./bin/ocx --data-dir /tmp/ocx init
 ```
 
-### 2) Loop artifacts
-
-`ocx lab run` and `ocx evolve run` write run artifacts under:
+Loop runs write deterministic artifacts under:
 
 - `~/.ocx/lab/runs/<run-id>/...`
 - `~/.ocx/evolve/runs/<run-id>/...`
 
-Each iteration has deterministic structure:
+Typical iteration files:
 
 - `iter-001/inbox/goal.md`
 - `iter-001/inbox/constraints.md`
@@ -55,79 +50,57 @@ Each iteration has deterministic structure:
 - `iter-001/outbox/inspector.json`
 - `iter-001/summary.md`
 
-Run-level review entrypoints:
+Run-level files:
 
 - `report.json`
 - `report.md`
-- `review-checklist.md` (start here for human review)
+- `review-checklist.md`
 
-### 3) PR handoff artifacts (`evolve`)
-
-When qualified, `evolve` writes:
+If using `evolve`, you also get PR handoff files:
 
 - `pr/pr-title.txt`
 - `pr/pr-body.md`
 - `evolve-report.json`
 - `evolve-report.md`
 
-## Command Surface
-
-### Context and sessions
-
-- `ocx init`
-- `ocx import claude --path <dir>`
-- `ocx import codex --path <dir>`
-- `ocx ingest auto [--dry-run] [--json] [--max-sessions N] [--since YYYY-MM-DD]`
-- `ocx context list|show|stats|export csv`
-- `ocx session list|show|search|export csv`
-- `ocx share export|import`
-- `ocx doctor`
-- `ocx dashboard`
-
-### Verification loop
-
-- `ocx lab init`
-- `ocx lab run --config docs/templates/lab-config.example.json`
-- `ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector '<cmd>'`
-
-## Lean Human Review Flow
-
-1. Open `<run-dir>/review-checklist.md`.
-2. Validate last iteration `summary.md`.
-3. Check `outbox/verify.log` and `outbox/inspector.json`.
-4. If evolve run: review `pr/pr-title.txt` and `pr/pr-body.md`.
-5. Open PR only after evidence is coherent.
-
-Inspector output contract (`outbox/inspector.json`):
-
-- `verdict`: `QUALIFIED` or `NOT_QUALIFIED`
-- `reasons`: `[]string`
-- `patch_hints`: `[]string`
-- `confidence`: number in `[0,1]`
-
-## Contributor Onboarding
+## Common Commands
 
 ```bash
-go mod tidy
-go test ./...
-go vet ./...
-go build ./cmd/ocx
+# local data
+./bin/ocx init
+./bin/ocx import claude --path ~/.claude/projects
+./bin/ocx import codex --path ~/.codex/sessions
+./bin/ocx ingest auto --max-sessions 50 --since 2026-02-01
+
+# query context/session
+./bin/ocx context list
+./bin/ocx context show default
+./bin/ocx context stats default
+./bin/ocx session list --limit 50
+./bin/ocx session show <session-id> --turn-limit 20
+./bin/ocx session search --query timeout --limit 50
+
+# export/share
+./bin/ocx context export csv default --out ./default-context.csv
+./bin/ocx session export csv --out ./sessions.csv --limit 200
+./bin/ocx share export default --out ./default.ocxpack
+./bin/ocx share import ./default.ocxpack
+
+# loop tooling
+./bin/ocx lab init
+./bin/ocx lab run --config ./docs/templates/lab-config.example.json
+./bin/ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector '<command>'
+
+# health
+./bin/ocx doctor
+./bin/ocx dashboard
 ```
 
-Primary docs:
+## Inspector Contract
 
-- `CONTRIBUTING.md`
-- `docs/skills/project-evolve-loop/SKILL.md`
-- `docs/skills/project-evolve-loop/references/runbook.md`
-- `docs/skills/project-evolve-loop/references/review-gate.md`
-- `docs/templates/lab-config.example.json`
+`outbox/inspector.json` must contain:
 
-PR templates:
-
-- `docs/templates/ai-pr-template.md`
-- `docs/templates/ai-pr-checklist.md`
-- `docs/templates/issue-first-proposal.md`
-
-## Release
-
-- release notes template: `docs/templates/release-notes-template.md`
+- `verdict`: `QUALIFIED` or `NOT_QUALIFIED`
+- `reasons`: array of strings
+- `patch_hints`: array of strings
+- `confidence`: number in `[0,1]`
