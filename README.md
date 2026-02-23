@@ -8,33 +8,48 @@ Local-first context memory and session tooling built with Go + SQLite.
 
 ## Install
 
-Install from source:
+### Go install (recommended)
 
 ```bash
 go install github.com/gh-xj/omnicontext/cmd/ocx@latest
 ```
 
-Or build locally in this repo:
+### Homebrew (tap)
+
+```bash
+brew tap gh-xj/homebrew-tap
+brew install ocx
+```
+
+### From source (this repo)
 
 ```bash
 go build -o bin/ocx ./cmd/ocx
 ```
 
-## First 5 Minutes
+## Install Verification
 
 ```bash
-go build -o bin/ocx ./cmd/ocx
-
-./bin/ocx init
-./bin/ocx ingest auto --dry-run --json
-./bin/ocx ingest auto --max-sessions 20 --since 2026-02-01
-
-./bin/ocx context list
-./bin/ocx context stats default
-./bin/ocx session search --query timeout --limit 20
+which ocx
+ocx version
+ocx --help
 ```
 
-If this works, your local context system is ready.
+Expected:
+
+- `which ocx` prints a valid binary path
+- `ocx version` prints release/build version
+- `ocx --help` prints command usage
+
+## First 60 Seconds
+
+```bash
+ocx init
+ocx ingest auto --max-sessions 20 --since 2026-02-01
+ocx context stats default
+```
+
+If this works, your local context system is usable.
 
 ## Filesystem Guide
 
@@ -45,10 +60,10 @@ Default data directory:
 Use a custom data directory:
 
 ```bash
-./bin/ocx --data-dir /tmp/ocx init
+ocx --data-dir /tmp/ocx init
 ```
 
-Loop runs write deterministic artifacts under:
+Run artifacts are deterministic on disk:
 
 - `~/.ocx/lab/runs/<run-id>/...`
 - `~/.ocx/evolve/runs/<run-id>/...`
@@ -70,7 +85,7 @@ Run-level files:
 - `report.md`
 - `review-checklist.md`
 
-If using `evolve`, you also get PR handoff files:
+For evolve runs:
 
 - `pr/pr-title.txt`
 - `pr/pr-body.md`
@@ -81,33 +96,33 @@ If using `evolve`, you also get PR handoff files:
 
 ```bash
 # local data
-./bin/ocx init
-./bin/ocx import claude --path ~/.claude/projects
-./bin/ocx import codex --path ~/.codex/sessions
-./bin/ocx ingest auto --max-sessions 50 --since 2026-02-01
+ocx init
+ocx import claude --path ~/.claude/projects
+ocx import codex --path ~/.codex/sessions
+ocx ingest auto --dry-run --json
 
 # query context/session
-./bin/ocx context list
-./bin/ocx context show default
-./bin/ocx context stats default
-./bin/ocx session list --limit 50
-./bin/ocx session show <session-id> --turn-limit 20
-./bin/ocx session search --query timeout --limit 50
+ocx context list
+ocx context stats default
+ocx session list --limit 50
+ocx session search --query timeout --limit 50
 
 # export/share
-./bin/ocx context export csv default --out ./default-context.csv
-./bin/ocx session export csv --out ./sessions.csv --limit 200
-./bin/ocx share export default --out ./default.ocxpack
-./bin/ocx share import ./default.ocxpack
+ocx context export csv default --out ./default-context.csv
+ocx session export csv --out ./sessions.csv --limit 200
+ocx share export default --out ./default.ocxpack
+ocx share import ./default.ocxpack
 
 # loop tooling
-./bin/ocx lab init
-./bin/ocx lab run --config ./docs/templates/lab-config.example.json
-./bin/ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''\n{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}\nJSON'
+ocx lab init
+ocx lab run --config ./docs/templates/lab-config.example.json
+ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''
+{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}
+JSON'
 
 # health
-./bin/ocx doctor
-./bin/ocx dashboard
+ocx doctor
+ocx dashboard
 ```
 
 ## Inspector Contract

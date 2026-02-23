@@ -140,3 +140,14 @@ func TestEvolveRunRequiresInspectorFlag(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestVersionCommandRegistered(t *testing.T) {
+	root := NewRootCmd()
+	cmd, _, err := root.Find([]string{"version"})
+	if err != nil {
+		t.Fatalf("find version: %v", err)
+	}
+	if cmd == nil || cmd.Name() != "version" {
+		t.Fatalf("expected version command")
+	}
+}

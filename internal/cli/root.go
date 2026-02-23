@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -20,12 +21,20 @@ import (
 	"github.com/gh-xj/omnicontext/internal/tui"
 )
 
+var (
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+)
+
 func NewRootCmd() *cobra.Command {
 	var dataDir string
 	root := &cobra.Command{
 		Use:   "ocx",
 		Short: "OmniContext CLI (OSS MVP)",
 	}
+	root.Version = buildVersionString()
+	root.SetVersionTemplate("{{.Version}}\n")
 	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir(), "Data directory (default: ~/.ocx)")
 
 	openStore := func() (*store.Store, error) {
@@ -70,6 +79,13 @@ func NewRootCmd() *cobra.Command {
 			fmt.Printf("ok: db=%s\n", filepath.Join(dataDir, "db", "ocx.db"))
 			fmt.Println("ok: schema migrated")
 			return nil
+		},
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print version",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(buildVersionString())
 		},
 	})
 
@@ -417,6 +433,19 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newEvolveCmd(dataDirProvider))
 
 	return root
+}
+
+func buildVersionString() string {
+	v := Version
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" && v == "dev" {
+			v = info.Main.Version
+		}
+	}
+	if Commit == "none" && Date == "unknown" {
+		return v
+	}
+	return fmt.Sprintf("%s (commit=%s date=%s)", v, Commit, Date)
 }
 
 func newImportSubCmd(kind string, openStore func() (*store.Store, error)) *cobra.Command {

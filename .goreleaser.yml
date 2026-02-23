@@ -12,6 +12,8 @@ builds:
     binary: ocx
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/gh-xj/omnicontext/internal/cli.Version={{.Version}} -X github.com/gh-xj/omnicontext/internal/cli.Commit={{.ShortCommit}} -X github.com/gh-xj/omnicontext/internal/cli.Date={{.Date}}
     goos:
       - darwin
       - linux
@@ -36,3 +38,14 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+
+brews:
+  - name: ocx
+    repository:
+      owner: gh-xj
+      name: homebrew-tap
+    homepage: https://github.com/gh-xj/omnicontext
+    description: Local-first context memory and verification-loop CLI
+    license: Apache-2.0
+    test: |
+      system "#{bin}/ocx", "version"
