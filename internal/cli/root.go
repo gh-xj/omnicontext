@@ -168,6 +168,85 @@ func NewRootCmd() *cobra.Command {
 	})
 	root.AddCommand(contextCmd)
 
+	sessionCmd := &cobra.Command{Use: "session", Short: "Session operations"}
+	var sessionListLimit int
+	sessionList := &cobra.Command{
+		Use:   "list",
+		Short: "List imported sessions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			items, err := st.ListSessions(sessionListLimit)
+			if err != nil {
+				return err
+			}
+			for _, s := range items {
+				fmt.Printf("%s\t%s\tturns=%d\t%s\n", s.ID, s.SessionType, s.TurnCount, s.SessionPath)
+			}
+			return nil
+		},
+	}
+	sessionList.Flags().IntVar(&sessionListLimit, "limit", 50, "Max sessions to show")
+	sessionCmd.AddCommand(sessionList)
+
+	var turnLimit int
+	sessionShow := &cobra.Command{
+		Use:   "show <session-id>",
+		Short: "Show session details and recent turns",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, err := openStore()
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			s, err := st.GetSession(args[0])
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("session not found: %s", args[0])
+				}
+				return err
+			}
+			fmt.Printf("id: %s\n", s.ID)
+			fmt.Printf("type: %s\n", s.SessionType)
+			fmt.Printf("path: %s\n", s.SessionPath)
+			fmt.Printf("workspace: %s\n", s.WorkspacePath)
+			fmt.Printf("started_at: %s\n", s.StartedAt)
+			fmt.Printf("last_activity: %s\n", s.LastActivityAt)
+			fmt.Printf("title: %s\n", s.SessionTitle)
+			fmt.Printf("summary: %s\n", s.SessionSummary)
+			fmt.Printf("turns: %d\n", s.TurnCount)
+
+			turns, err := st.ListTurns(s.ID, turnLimit)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("recent_turns (newest first, limit=%d):\n", turnLimit)
+			if len(turns) == 0 {
+				fmt.Println("- (none)")
+				return nil
+			}
+			for _, t := range turns {
+				user := t.UserMessage
+				if len(user) > 120 {
+					user = user[:120] + "..."
+				}
+				asst := t.AssistantSummary
+				if len(asst) > 120 {
+					asst = asst[:120] + "..."
+				}
+				fmt.Printf("- #%d @ %s\n  user: %s\n  assistant: %s\n", t.TurnNumber, t.Timestamp, user, asst)
+			}
+			return nil
+		},
+	}
+	sessionShow.Flags().IntVar(&turnLimit, "turn-limit", 10, "Number of recent turns to include")
+	sessionCmd.AddCommand(sessionShow)
+	root.AddCommand(sessionCmd)
+
 	shareCmd := &cobra.Command{Use: "share", Short: "Local share pack operations"}
 	exportCmd := &cobra.Command{
 		Use:   "export <context-id>",

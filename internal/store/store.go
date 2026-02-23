@@ -57,6 +57,25 @@ type KVCount struct {
 	Count int
 }
 
+type SessionRow struct {
+	ID             string
+	SessionType    string
+	SessionPath    string
+	WorkspacePath  string
+	StartedAt      string
+	LastActivityAt string
+	SessionTitle   string
+	SessionSummary string
+	TurnCount      int
+}
+
+type TurnRow struct {
+	TurnNumber       int
+	UserMessage      string
+	AssistantSummary string
+	Timestamp        string
+}
+
 func DefaultDataDir() string {
 	h, err := os.UserHomeDir()
 	if err != nil {
@@ -327,6 +346,88 @@ func (s *Store) SessionsForContext(id string) ([]map[string]string, error) {
 		out = append(out, map[string]string{
 			"id": id, "type": typ, "path": p, "title": title, "last_activity": last,
 		})
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListSessions(limit int) ([]SessionRow, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.DB.Query(`
+		SELECT s.id, s.session_type, s.session_path, COALESCE(s.workspace_path,''), COALESCE(s.started_at,''), COALESCE(s.last_activity_at,''),
+		       COALESCE(s.session_title,''), COALESCE(s.session_summary,''), COALESCE(t.turn_count,0)
+		FROM sessions s
+		LEFT JOIN (
+			SELECT session_id, COUNT(*) AS turn_count
+			FROM turns
+			GROUP BY session_id
+		) t ON t.session_id = s.id
+		ORDER BY s.last_activity_at DESC, s.id
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SessionRow, 0)
+	for rows.Next() {
+		var srow SessionRow
+		if err := rows.Scan(
+			&srow.ID, &srow.SessionType, &srow.SessionPath, &srow.WorkspacePath, &srow.StartedAt,
+			&srow.LastActivityAt, &srow.SessionTitle, &srow.SessionSummary, &srow.TurnCount,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, srow)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetSession(id string) (*SessionRow, error) {
+	var srow SessionRow
+	err := s.DB.QueryRow(`
+		SELECT s.id, s.session_type, s.session_path, COALESCE(s.workspace_path,''), COALESCE(s.started_at,''), COALESCE(s.last_activity_at,''),
+		       COALESCE(s.session_title,''), COALESCE(s.session_summary,''), COALESCE(t.turn_count,0)
+		FROM sessions s
+		LEFT JOIN (
+			SELECT session_id, COUNT(*) AS turn_count
+			FROM turns
+			GROUP BY session_id
+		) t ON t.session_id = s.id
+		WHERE s.id = ?
+	`, id).Scan(
+		&srow.ID, &srow.SessionType, &srow.SessionPath, &srow.WorkspacePath, &srow.StartedAt,
+		&srow.LastActivityAt, &srow.SessionTitle, &srow.SessionSummary, &srow.TurnCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &srow, nil
+}
+
+func (s *Store) ListTurns(sessionID string, limit int) ([]TurnRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.DB.Query(`
+		SELECT turn_number, COALESCE(user_message,''), COALESCE(assistant_summary,''), COALESCE(timestamp,'')
+		FROM turns
+		WHERE session_id = ?
+		ORDER BY turn_number DESC
+		LIMIT ?
+	`, sessionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]TurnRow, 0)
+	for rows.Next() {
+		var tr TurnRow
+		if err := rows.Scan(&tr.TurnNumber, &tr.UserMessage, &tr.AssistantSummary, &tr.Timestamp); err != nil {
+			return nil, err
+		}
+		out = append(out, tr)
 	}
 	return out, rows.Err()
 }

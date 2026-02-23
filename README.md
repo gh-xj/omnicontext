@@ -12,6 +12,8 @@ Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
 - `ocx context list`
 - `ocx context show <id>`
 - `ocx context stats <id>` (deterministic aggregation by source/workspace/turns)
+- `ocx session list --limit 50`
+- `ocx session show <session-id> --turn-limit 10`
 - `ocx share export <context-id> --out ./x.ocxpack`
 - `ocx share import ./x.ocxpack`
 - `ocx doctor`
@@ -32,6 +34,7 @@ go test ./...
 ./bin/ocx ingest auto --dry-run --json
 ./bin/ocx context list
 ./bin/ocx context stats default
+./bin/ocx session list --limit 20
 ./bin/ocx share export default --out ./default.ocxpack
 ./bin/ocx share import ./default.ocxpack
 ./bin/ocx doctor

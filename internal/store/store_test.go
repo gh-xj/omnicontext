@@ -139,3 +139,57 @@ func TestContextStatsAndSummary(t *testing.T) {
 		t.Fatalf("context summary empty after refresh")
 	}
 }
+
+func TestListAndGetSessions(t *testing.T) {
+	st, dir := newTestStore(t)
+	defer st.Close()
+
+	_, err := st.InsertImportedSession(SessionInput{
+		SessionID:      "claude-list-1",
+		SessionType:    "claude",
+		SessionPath:    filepath.Join(dir, "claude-list-1.jsonl"),
+		WorkspacePath:  "/tmp/ws-list",
+		StartedAt:      "2026-01-01T00:00:00Z",
+		LastActivityAt: "2026-01-01T00:00:05Z",
+		SessionTitle:   "list title",
+		SessionSummary: "list summary",
+		Metadata:       "{}",
+	}, []TurnInput{
+		{UserMessage: "hello", AssistantSummary: "world", Timestamp: "2026-01-01T00:00:01Z"},
+		{UserMessage: "q2", AssistantSummary: "a2", Timestamp: "2026-01-01T00:00:02Z"},
+	})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	sessions, err := st.ListSessions(10)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("session len = %d", len(sessions))
+	}
+	if sessions[0].ID != "claude-list-1" || sessions[0].TurnCount != 2 {
+		t.Fatalf("unexpected session row: %+v", sessions[0])
+	}
+
+	got, err := st.GetSession("claude-list-1")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if got.SessionPath == "" || got.SessionType != "claude" || got.TurnCount != 2 {
+		t.Fatalf("unexpected session details: %+v", got)
+	}
+
+	turns, err := st.ListTurns("claude-list-1", 10)
+	if err != nil {
+		t.Fatalf("list turns: %v", err)
+	}
+	if len(turns) != 2 {
+		t.Fatalf("turn len = %d", len(turns))
+	}
+	// newest first
+	if turns[0].TurnNumber != 2 {
+		t.Fatalf("unexpected turn ordering: %+v", turns)
+	}
+}
