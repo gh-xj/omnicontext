@@ -1,114 +1,133 @@
 # OmniContext
 
-Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
+Local-first context memory + verification-loop tooling for human and AI collaboration.
 
-## Features (MVP)
-- `ocx init` to initialize local store
-- `ocx import claude --path ...` (real Claude JSONL adapter)
-- `ocx import codex --path ...` (real Codex JSONL adapter)
-- `ocx ingest auto` (scan defaults: `~/.claude/projects`, `~/.codex/sessions`)
-- `ocx ingest auto --dry-run` (preview only)
-- `ocx ingest auto --json` (machine-readable output)
-- `ocx ingest auto --max-sessions N --since YYYY-MM-DD` (incremental control)
-- `ocx context list`
-- `ocx context show <id>`
-- `ocx context stats <id>` (deterministic aggregation by source/workspace/turns)
-- `ocx context export csv <id> --out ./context.csv`
-- `ocx session list --limit 50`
-- `ocx session show <session-id> --turn-limit 10`
-- `ocx session search --query timeout --limit 50`
-- `ocx session export csv --out ./sessions.csv --query timeout --limit 1000`
-- `ocx lab init` + `ocx lab run` (multi-agent verification loop with file-based inbox/outbox)
-- `ocx evolve run` (self-evolution harness: local loop -> auto-fix -> PR handoff)
-- `ocx share export <context-id> --out ./x.ocxpack`
-- `ocx share import ./x.ocxpack`
-- `ocx doctor`
-- `ocx dashboard` (minimal Bubble Tea UI)
+## Why
 
-## Build
+OmniContext is designed around one principle: keep all evidence on disk so humans can verify fast.
+
+- ingest session data from local tools (Claude/Codex)
+- query/share context from a local SQLite store
+- run a local verification loop (`lab` / `evolve`)
+- hand off a PR with reproducible artifacts for human review
+
+## First 5 Minutes (User-First)
+
 ```bash
-go mod tidy
 go build -o bin/ocx ./cmd/ocx
-go test ./...
-```
 
-## Quickstart
-```bash
 ./bin/ocx init
-./bin/ocx import claude --path ~/.claude/projects
-./bin/ocx ingest auto
-./bin/ocx ingest auto --dry-run --json --max-sessions 20 --since 2026-02-01
+./bin/ocx ingest auto --dry-run --json
+./bin/ocx ingest auto --max-sessions 20 --since 2026-02-01
+
 ./bin/ocx context list
 ./bin/ocx context stats default
-./bin/ocx session list --limit 20
-./bin/ocx session search --query codex --limit 20
-./bin/ocx session export csv --out ./sessions.csv --limit 100
-./bin/ocx context export csv default --out ./default-context.csv
-./bin/ocx lab init
-./bin/ocx lab run --config ./docs/templates/lab-config.example.json --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''\n{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}\nJSON'
-./bin/ocx evolve run --goal \"fix parser edge case\" --max-iterations 3 --inspector 'cat > "$OCX_LAB_INSPECTOR_JSON_FILE" <<'\''JSON'\''\n{"verdict":"QUALIFIED","reasons":["all checks passed"],"patch_hints":[],"confidence":0.95}\nJSON'
-./bin/ocx share export default --out ./default.ocxpack
-./bin/ocx share import ./default.ocxpack
-./bin/ocx doctor
+./bin/ocx session search --query timeout --limit 20
 ```
 
-## AI Feedback Loop (Harness Engineering)
+If this works, you already have a usable local context system.
 
-Expected workflow:
-1. Trigger project skill: `docs/skills/project-evolve-loop/SKILL.md`
-2. Run local loop:
-```bash
-./bin/ocx evolve run \
-  --goal "fix bug X with backward compatibility" \
-  --max-iterations 3 \
-  --context-designer "printf '# Context Pack\n- stable acceptance\n' > \"$OCX_LAB_CONTEXT_PACK_FILE\"" \
-  --launcher "echo 'launch external agent with context-pack' > \"$OCX_LAB_ITER_DIR/outbox/launcher.log\"" \
-  --verify "go vet ./... && go test ./... && go build ./cmd/ocx" \
-  --inspector "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'
-{\"verdict\":\"QUALIFIED\",\"reasons\":[\"all checks passed\"],\"patch_hints\":[],\"confidence\":0.95}
-JSON" \
-  --auto-commit
-```
-3. Inspect artifacts generated under `<data-dir>/evolve/runs/<run-id>/`
-   - start from `review-checklist.md` for the human verification path
-4. Human reviews `pr-title.txt` and `pr-body.md`, then opens/reviews PR.
+## Filesystem Mental Model
 
-Inspector output schema (`outbox/inspector.json`, required):
-- `verdict`: `QUALIFIED` or `NOT_QUALIFIED`
-- `reasons`: array of strings
-- `patch_hints`: array of strings (used for next-step hints on failure)
-- `confidence`: number in `[0,1]`
+### 1) Data root
 
-Inspector input artifact:
-- `inbox/session-ref.json` (workspace/run/iteration reference for the inspector command)
+Default data dir is `~/.ocx` (override with `--data-dir`).
 
-## Data Dir
-Default: `~/.ocx`
-
-Use custom path:
 ```bash
 ./bin/ocx --data-dir /tmp/ocx init
 ```
 
-## Contributing
+### 2) Loop artifacts
 
-- Contributor guide: `CONTRIBUTING.md`
-- AI PR templates:
-  - `docs/templates/ai-pr-template.md`
-  - `docs/templates/ai-pr-checklist.md`
-  - `docs/templates/issue-first-proposal.md`
-- Verification loop skill template:
-  - `docs/skills/verification-loop/SKILL.md`
-  - `docs/skills/verification-loop/references/commands.md`
-  - `docs/skills/verification-loop/references/file-protocol.md`
-  - `docs/skills/verification-loop/references/pr-gate.md`
-  - `docs/skills/verification-loop-generic.md` (high-level design)
-  - `docs/templates/lab-config.example.json`
-- Project evolve loop skill:
-  - `docs/skills/project-evolve-loop/SKILL.md`
-  - `docs/skills/project-evolve-loop/references/runbook.md`
-  - `docs/skills/project-evolve-loop/references/review-gate.md`
+`ocx lab run` and `ocx evolve run` write run artifacts under:
 
-## Release Notes
+- `~/.ocx/lab/runs/<run-id>/...`
+- `~/.ocx/evolve/runs/<run-id>/...`
 
-- Template: `docs/templates/release-notes-template.md`
+Each iteration has deterministic structure:
+
+- `iter-001/inbox/goal.md`
+- `iter-001/inbox/constraints.md`
+- `iter-001/inbox/context-pack.md`
+- `iter-001/inbox/session-ref.json`
+- `iter-001/outbox/verify.log`
+- `iter-001/outbox/inspector.log`
+- `iter-001/outbox/inspector.json`
+- `iter-001/summary.md`
+
+Run-level review entrypoints:
+
+- `report.json`
+- `report.md`
+- `review-checklist.md` (start here for human review)
+
+### 3) PR handoff artifacts (`evolve`)
+
+When qualified, `evolve` writes:
+
+- `pr/pr-title.txt`
+- `pr/pr-body.md`
+- `evolve-report.json`
+- `evolve-report.md`
+
+## Command Surface
+
+### Context and sessions
+
+- `ocx init`
+- `ocx import claude --path <dir>`
+- `ocx import codex --path <dir>`
+- `ocx ingest auto [--dry-run] [--json] [--max-sessions N] [--since YYYY-MM-DD]`
+- `ocx context list|show|stats|export csv`
+- `ocx session list|show|search|export csv`
+- `ocx share export|import`
+- `ocx doctor`
+- `ocx dashboard`
+
+### Verification loop
+
+- `ocx lab init`
+- `ocx lab run --config docs/templates/lab-config.example.json`
+- `ocx evolve run --goal "fix parser edge case" --max-iterations 3 --inspector '<cmd>'`
+
+## Lean Human Review Flow
+
+1. Open `<run-dir>/review-checklist.md`.
+2. Validate last iteration `summary.md`.
+3. Check `outbox/verify.log` and `outbox/inspector.json`.
+4. If evolve run: review `pr/pr-title.txt` and `pr/pr-body.md`.
+5. Open PR only after evidence is coherent.
+
+Inspector output contract (`outbox/inspector.json`):
+
+- `verdict`: `QUALIFIED` or `NOT_QUALIFIED`
+- `reasons`: `[]string`
+- `patch_hints`: `[]string`
+- `confidence`: number in `[0,1]`
+
+## Contributor Onboarding
+
+```bash
+go mod tidy
+go test ./...
+go vet ./...
+go build ./cmd/ocx
+```
+
+Primary docs:
+
+- `CONTRIBUTING.md`
+- `docs/skills/project-evolve-loop/SKILL.md`
+- `docs/skills/project-evolve-loop/references/runbook.md`
+- `docs/skills/project-evolve-loop/references/review-gate.md`
+- `docs/templates/lab-config.example.json`
+
+PR templates:
+
+- `docs/templates/ai-pr-template.md`
+- `docs/templates/ai-pr-checklist.md`
+- `docs/templates/issue-first-proposal.md`
+
+## Release
+
+- release notes template: `docs/templates/release-notes-template.md`
