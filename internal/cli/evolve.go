@@ -60,7 +60,6 @@ func newEvolveCmd(dataDirProvider func() string) *cobra.Command {
 	run.Flags().StringVar(&cfg.InspectorCommand, "inspector", "", "Inspector command (required)")
 	run.Flags().StringVar(&cfg.PlannerCommand, "planner", "", "Planner command (optional)")
 	run.Flags().StringVar(&cfg.ImplementerCommand, "implementer", "", "Implementer command (optional)")
-	run.Flags().StringVar(&cfg.JudgeCommand, "judge", "", "Judge command (optional; defaults to verifier log-based)")
 	run.Flags().StringVar(&cfg.Workspace, "workspace", "", "Workspace directory (default: cwd)")
 	run.Flags().StringVar(&cfg.Branch, "branch", "", "Branch name (default: evolve/<timestamp>)")
 	run.Flags().BoolVar(&cfg.AllowDirty, "allow-dirty", false, "Allow running with dirty working tree")

@@ -41,11 +41,12 @@ func TestRunNotQualified(t *testing.T) {
 	base := t.TempDir()
 	ws := t.TempDir()
 	cfg := Config{
-		Workspace:     ws,
-		Goal:          "never pass",
-		MaxIterations: 2,
-		VerifyCommand: "exit 1",
-		Shell:         "sh",
+		Workspace:        ws,
+		Goal:             "never pass",
+		MaxIterations:    2,
+		VerifyCommand:    "exit 1",
+		InspectorCommand: "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\n{\"verdict\":\"NOT_QUALIFIED\",\"reasons\":[\"verify failed\"],\"patch_hints\":[],\"confidence\":0.60}\nJSON",
+		Shell:            "sh",
 	}
 	r, err := Run(base, cfg)
 	if err != nil {
@@ -138,11 +139,12 @@ func TestRunMissingInspectorSchemaIsClearReason(t *testing.T) {
 	base := t.TempDir()
 	ws := t.TempDir()
 	cfg := Config{
-		Workspace:     ws,
-		Goal:          "missing inspector payload",
-		MaxIterations: 1,
-		VerifyCommand: "exit 0",
-		Shell:         "sh",
+		Workspace:        ws,
+		Goal:             "missing inspector payload",
+		MaxIterations:    1,
+		VerifyCommand:    "exit 0",
+		InspectorCommand: "true",
+		Shell:            "sh",
 	}
 	r, err := Run(base, cfg)
 	if err != nil {
@@ -277,11 +279,12 @@ func TestRunSessionRefArtifactPerIteration(t *testing.T) {
 	base := t.TempDir()
 	ws := t.TempDir()
 	cfg := Config{
-		Workspace:     ws,
-		Goal:          "write session ref each iteration",
-		MaxIterations: 2,
-		VerifyCommand: "exit 1",
-		Shell:         "sh",
+		Workspace:        ws,
+		Goal:             "write session ref each iteration",
+		MaxIterations:    2,
+		VerifyCommand:    "exit 1",
+		InspectorCommand: "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\n{\"verdict\":\"NOT_QUALIFIED\",\"reasons\":[\"verify failed\"],\"patch_hints\":[],\"confidence\":0.61}\nJSON",
+		Shell:            "sh",
 	}
 	r, err := Run(base, cfg)
 	if err != nil {

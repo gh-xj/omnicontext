@@ -67,24 +67,9 @@ type RunReport struct {
 }
 
 func Run(baseDir string, cfg Config) (RunReport, error) {
-	if strings.TrimSpace(cfg.Goal) == "" {
-		return RunReport{}, fmt.Errorf("goal is required")
-	}
-	if strings.TrimSpace(cfg.VerifyCommand) == "" {
-		return RunReport{}, fmt.Errorf("verify command is required")
-	}
-	if cfg.MaxIterations <= 0 {
-		cfg.MaxIterations = 3
-	}
-	if cfg.Shell == "" {
-		cfg.Shell = os.Getenv("SHELL")
-		if cfg.Shell == "" {
-			cfg.Shell = "sh"
-		}
-	}
-	if cfg.Workspace == "" {
-		wd, _ := os.Getwd()
-		cfg.Workspace = wd
+	cfg = normalizeConfig(cfg)
+	if err := validateConfig(cfg); err != nil {
+		return RunReport{}, err
 	}
 
 	runID := time.Now().UTC().Format("20060102-150405")
@@ -142,47 +127,27 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 			"OCX_LAB_SESSION_PATH_FILE":   sessionPathHintPath,
 		}
 
-		if strings.TrimSpace(cfg.ContextDesigner) != "" {
-			code, out := runShell(cfg.Shell, cfg.Workspace, cfg.ContextDesigner, env)
-			iter.ContextCode = code
-			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "context-designer.log"), out, 0o644)
-		}
+		iter.ContextCode = runOptionalCommand(cfg.Shell, cfg.Workspace, cfg.ContextDesigner, env, filepath.Join(iterDir, "outbox", "context-designer.log"))
 		iter.ContextPack = contextPackPath
 		iter.ContextHash = hashFileSHA256(contextPackPath)
 		if iter.ContextHash != "" {
 			env["OCX_LAB_CONTEXT_PACK_SHA256"] = iter.ContextHash
 		}
 
-		if strings.TrimSpace(cfg.LauncherCommand) != "" {
-			code, out := runShell(cfg.Shell, cfg.Workspace, cfg.LauncherCommand, env)
-			iter.LauncherCode = code
-			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "launcher.log"), out, 0o644)
-		}
+		iter.LauncherCode = runOptionalCommand(cfg.Shell, cfg.Workspace, cfg.LauncherCommand, env, filepath.Join(iterDir, "outbox", "launcher.log"))
 
-		if strings.TrimSpace(cfg.PlannerCommand) != "" {
-			code, out := runShell(cfg.Shell, cfg.Workspace, cfg.PlannerCommand, env)
-			iter.PlannerCode = code
-			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "planner.log"), out, 0o644)
-		}
+		iter.PlannerCode = runOptionalCommand(cfg.Shell, cfg.Workspace, cfg.PlannerCommand, env, filepath.Join(iterDir, "outbox", "planner.log"))
 
-		if strings.TrimSpace(cfg.ImplementerCommand) != "" {
-			code, out := runShell(cfg.Shell, cfg.Workspace, cfg.ImplementerCommand, env)
-			iter.ImplementCode = code
-			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "implementer.log"), out, 0o644)
-		}
+		iter.ImplementCode = runOptionalCommand(cfg.Shell, cfg.Workspace, cfg.ImplementerCommand, env, filepath.Join(iterDir, "outbox", "implementer.log"))
 
 		vcode, vout := runShell(cfg.Shell, cfg.Workspace, cfg.VerifyCommand, env)
 		iter.VerifyCode = vcode
 		_ = os.WriteFile(verifyLogPath, vout, 0o644)
 		sessionPath := readSessionPathHint(sessionPathHintPath)
 		_ = writeSessionRef(sessionRefPath, cfg.Workspace, runID, i, sessionPath)
-		if strings.TrimSpace(cfg.InspectorCommand) != "" {
-			icode, iout := runShell(cfg.Shell, cfg.Workspace, cfg.InspectorCommand, env)
-			iter.InspectorCode = icode
-			_ = os.WriteFile(inspectorLogPath, iout, 0o644)
-		} else {
-			_ = os.WriteFile(inspectorLogPath, []byte("inspector command not configured\n"), 0o644)
-		}
+		icode, iout := runShell(cfg.Shell, cfg.Workspace, cfg.InspectorCommand, env)
+		iter.InspectorCode = icode
+		_ = os.WriteFile(inspectorLogPath, iout, 0o644)
 		iter.InspectorPath = inspectorPath
 		inspector, inspectorErr := parseInspectorOutput(inspectorPath)
 		if inspectorErr == nil {
@@ -190,33 +155,8 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 			iter.Inspector = inspector.Verdict
 		}
 
-		qualified := false
-		reason := "verification failed"
-		if strings.TrimSpace(cfg.JudgeCommand) != "" {
-			jcode, jout := runShell(cfg.Shell, cfg.Workspace, cfg.JudgeCommand, env)
-			iter.JudgeCode = jcode
-			_ = os.WriteFile(filepath.Join(iterDir, "outbox", "judge.log"), jout, 0o644)
-		}
-
-		if vcode == 0 && iter.InspectorCode == 0 && inspectorErr == nil && inspector.Verdict == "QUALIFIED" {
-			qualified = true
-			reason = "verification and inspector qualified"
-		} else {
-			switch {
-			case vcode != 0 && iter.InspectorCode != 0:
-				reason = fmt.Sprintf("verification failed and inspector command failed (exit %d)", iter.InspectorCode)
-			case vcode != 0 && inspectorErr != nil:
-				reason = fmt.Sprintf("verification failed and inspector schema invalid: %v", inspectorErr)
-			case vcode != 0:
-				reason = "verification failed"
-			case iter.InspectorCode != 0:
-				reason = fmt.Sprintf("inspector command failed (exit %d)", iter.InspectorCode)
-			case inspectorErr != nil:
-				reason = fmt.Sprintf("inspector schema invalid: %v", inspectorErr)
-			case inspector.Verdict != "QUALIFIED":
-				reason = fmt.Sprintf("inspector verdict %s", inspector.Verdict)
-			}
-		}
+		iter.JudgeCode = runOptionalCommand(cfg.Shell, cfg.Workspace, cfg.JudgeCommand, env, filepath.Join(iterDir, "outbox", "judge.log"))
+		qualified, reason := evaluateQualification(vcode, iter.InspectorCode, inspector, inspectorErr)
 		if !qualified && inspectorErr == nil && len(inspector.PatchHints) > 0 {
 			nextStepHints = append([]string{}, inspector.PatchHints...)
 		} else {
@@ -246,6 +186,36 @@ func Run(baseDir string, cfg Config) (RunReport, error) {
 	return report, nil
 }
 
+func normalizeConfig(cfg Config) Config {
+	if cfg.MaxIterations <= 0 {
+		cfg.MaxIterations = 3
+	}
+	if strings.TrimSpace(cfg.Shell) == "" {
+		cfg.Shell = os.Getenv("SHELL")
+		if cfg.Shell == "" {
+			cfg.Shell = "sh"
+		}
+	}
+	if strings.TrimSpace(cfg.Workspace) == "" {
+		wd, _ := os.Getwd()
+		cfg.Workspace = wd
+	}
+	return cfg
+}
+
+func validateConfig(cfg Config) error {
+	if strings.TrimSpace(cfg.Goal) == "" {
+		return fmt.Errorf("goal is required")
+	}
+	if strings.TrimSpace(cfg.VerifyCommand) == "" {
+		return fmt.Errorf("verify command is required")
+	}
+	if strings.TrimSpace(cfg.InspectorCommand) == "" {
+		return fmt.Errorf("inspector command is required")
+	}
+	return nil
+}
+
 func runShell(shell, cwd, command string, extraEnv map[string]string) (int, []byte) {
 	cmd := exec.Command(shell, "-lc", command)
 	cmd.Dir = cwd
@@ -265,6 +235,35 @@ func runShell(shell, cwd, command string, extraEnv map[string]string) (int, []by
 		return ee.ExitCode(), b.Bytes()
 	}
 	return 1, b.Bytes()
+}
+
+func runOptionalCommand(shell, cwd, command string, env map[string]string, logPath string) int {
+	if strings.TrimSpace(command) == "" {
+		return 0
+	}
+	code, out := runShell(shell, cwd, command, env)
+	_ = os.WriteFile(logPath, out, 0o644)
+	return code
+}
+
+func evaluateQualification(verifyCode, inspectorCode int, inspector inspectorOutput, inspectorErr error) (bool, string) {
+	if verifyCode == 0 && inspectorCode == 0 && inspectorErr == nil && inspector.Verdict == "QUALIFIED" {
+		return true, "verification and inspector qualified"
+	}
+	switch {
+	case verifyCode != 0 && inspectorCode != 0:
+		return false, fmt.Sprintf("verification failed and inspector command failed (exit %d)", inspectorCode)
+	case verifyCode != 0 && inspectorErr != nil:
+		return false, fmt.Sprintf("verification failed and inspector schema invalid: %v", inspectorErr)
+	case verifyCode != 0:
+		return false, "verification failed"
+	case inspectorCode != 0:
+		return false, fmt.Sprintf("inspector command failed (exit %d)", inspectorCode)
+	case inspectorErr != nil:
+		return false, fmt.Sprintf("inspector schema invalid: %v", inspectorErr)
+	default:
+		return false, fmt.Sprintf("inspector verdict %s", inspector.Verdict)
+	}
 }
 
 func writeIterationSummary(iterDir string, iter IterationResult) {

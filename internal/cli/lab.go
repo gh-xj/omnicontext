@@ -32,6 +32,7 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 				PlannerCommand:     "echo '- inspect failures\n- patch minimal\n- re-verify' > \"$OCX_LAB_PLAN_FILE\"",
 				ImplementerCommand: "echo 'implementer placeholder' > \"$OCX_LAB_IMPL_FILE\"",
 				VerifyCommand:      "go test ./...",
+				InspectorCommand:   "cat > \"$OCX_LAB_INSPECTOR_JSON_FILE\" <<'JSON'\n{\"verdict\":\"QUALIFIED\",\"reasons\":[\"sample passed\"],\"patch_hints\":[],\"confidence\":0.90}\nJSON",
 				JudgeCommand:       "if grep -q 'FAIL' \"$OCX_LAB_ITER_DIR/outbox/verify.log\"; then echo NOT_QUALIFIED; exit 1; else echo QUALIFIED; fi",
 			}
 			b, _ := json.MarshalIndent(sample, "", "  ")
@@ -114,9 +115,6 @@ func newLabCmd(dataDirProvider func() string) *cobra.Command {
 			}
 			if cfg.VerifyCommand == "" {
 				return errors.New("verify command is required (use --verify or --config)")
-			}
-			if cfg.InspectorCommand == "" {
-				return errors.New("inspector command is required (use --inspector or --config)")
 			}
 
 			report, err := lab.Run(resolveLabDir(dataDirProvider(), runDirRun), cfg)

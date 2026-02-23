@@ -25,7 +25,6 @@ type Config struct {
 	InspectorCommand   string
 	PlannerCommand     string
 	ImplementerCommand string
-	JudgeCommand       string
 	Branch             string
 	AllowDirty         bool
 	AutoCommit         bool
@@ -98,10 +97,6 @@ func Run(cfg Config) (Report, error) {
 		return Report{}, err
 	}
 
-	judge := cfg.JudgeCommand
-	if strings.TrimSpace(judge) == "" {
-		judge = `if grep -q "FAIL" "$OCX_LAB_ITER_DIR/outbox/verify.log"; then echo NOT_QUALIFIED; exit 1; else echo QUALIFIED; fi`
-	}
 	labReport, err := lab.Run(runsBase, lab.Config{
 		Workspace:          cfg.Workspace,
 		Goal:               cfg.Goal,
@@ -112,7 +107,6 @@ func Run(cfg Config) (Report, error) {
 		ImplementerCommand: cfg.ImplementerCommand,
 		VerifyCommand:      cfg.VerifyCommand,
 		InspectorCommand:   cfg.InspectorCommand,
-		JudgeCommand:       judge,
 	})
 	if err != nil {
 		return Report{}, err
