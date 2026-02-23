@@ -151,3 +151,13 @@ func TestVersionCommandRegistered(t *testing.T) {
 		t.Fatalf("expected version command")
 	}
 }
+
+func TestRootPersistentRuntimeFlagsRegistered(t *testing.T) {
+	root := NewRootCmd()
+	flags := []string{"verbose", "config", "no-color"}
+	for _, name := range flags {
+		if root.PersistentFlags().Lookup(name) == nil {
+			t.Fatalf("expected persistent flag %q", name)
+		}
+	}
+}

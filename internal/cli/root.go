@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	agentcli "github.com/gh-xj/agentcli-go"
 	"github.com/spf13/cobra"
 
 	"github.com/gh-xj/omnicontext/internal/adapters"
@@ -29,13 +30,27 @@ var (
 
 func NewRootCmd() *cobra.Command {
 	var dataDir string
+	var verbose bool
+	var configPath string
+	var noColor bool
 	root := &cobra.Command{
-		Use:   "ocx",
-		Short: "OmniContext CLI (OSS MVP)",
+		Use:          "ocx",
+		Short:        "OmniContext CLI (OSS MVP)",
+		SilenceUsage: true,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if verbose {
+				agentcli.InitLogger()
+			}
+			_ = configPath
+			_ = noColor
+		},
 	}
 	root.Version = buildVersionString()
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir(), "Data directory (default: ~/.ocx)")
+	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug logs")
+	root.PersistentFlags().StringVar(&configPath, "config", "", "Config file path (reserved for future use)")
+	root.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colorized output")
 
 	openStore := func() (*store.Store, error) {
 		st, err := store.Open(dataDir)
