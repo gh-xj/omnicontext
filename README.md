@@ -66,5 +66,9 @@ Use custom path:
   - `docs/templates/ai-pr-checklist.md`
   - `docs/templates/issue-first-proposal.md`
 - Verification loop skill template:
-  - `docs/skills/verification-loop-generic.md`
+  - `docs/skills/verification-loop/SKILL.md`
+  - `docs/skills/verification-loop/references/commands.md`
+  - `docs/skills/verification-loop/references/file-protocol.md`
+  - `docs/skills/verification-loop/references/pr-gate.md`
+  - `docs/skills/verification-loop-generic.md` (high-level design)
   - `docs/templates/lab-config.example.json`

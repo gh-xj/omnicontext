@@ -32,3 +32,6 @@ Use templates in `docs/templates/`:
 - `docs/templates/issue-first-proposal.md`
 
 These templates are designed for agent-authored PRs to keep tone concise, policy-aware, and reviewer-friendly.
+
+For iterative auto-fix and quality-gated loops, use:
+- `docs/skills/verification-loop/SKILL.md`
