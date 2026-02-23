@@ -35,3 +35,4 @@ These templates are designed for agent-authored PRs to keep tone concise, policy
 
 For iterative auto-fix and quality-gated loops, use:
 - `docs/skills/verification-loop/SKILL.md`
+- `docs/skills/project-evolve-loop/SKILL.md`

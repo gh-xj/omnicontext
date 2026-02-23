@@ -12,7 +12,7 @@ import (
 	"github.com/gh-xj/omnicontext/internal/lab"
 )
 
-func newLabCmd(dataDir string) *cobra.Command {
+func newLabCmd(dataDirProvider func() string) *cobra.Command {
 	labCmd := &cobra.Command{Use: "lab", Short: "Multi-agent experiment runner with verification loop"}
 
 	var runDir string
@@ -20,7 +20,7 @@ func newLabCmd(dataDir string) *cobra.Command {
 		Use:   "init",
 		Short: "Initialize lab workspace and sample config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			d := resolveLabDir(dataDir, runDir)
+			d := resolveLabDir(dataDirProvider(), runDir)
 			if err := os.MkdirAll(d, 0o755); err != nil {
 				return err
 			}
@@ -102,7 +102,7 @@ func newLabCmd(dataDir string) *cobra.Command {
 				return errors.New("verify command is required (use --verify or --config)")
 			}
 
-			report, err := lab.Run(resolveLabDir(dataDir, runDirRun), cfg)
+			report, err := lab.Run(resolveLabDir(dataDirProvider(), runDirRun), cfg)
 			if err != nil {
 				return err
 			}

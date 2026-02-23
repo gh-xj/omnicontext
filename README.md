@@ -19,6 +19,7 @@ Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
 - `ocx session search --query timeout --limit 50`
 - `ocx session export csv --out ./sessions.csv --query timeout --limit 1000`
 - `ocx lab init` + `ocx lab run` (multi-agent verification loop with file-based inbox/outbox)
+- `ocx evolve run` (self-evolution harness: local loop -> auto-fix -> PR handoff)
 - `ocx share export <context-id> --out ./x.ocxpack`
 - `ocx share import ./x.ocxpack`
 - `ocx doctor`
@@ -45,10 +46,26 @@ go test ./...
 ./bin/ocx context export csv default --out ./default-context.csv
 ./bin/ocx lab init
 ./bin/ocx lab run --config ./docs/templates/lab-config.example.json
+./bin/ocx evolve run --goal \"fix parser edge case\" --max-iterations 3
 ./bin/ocx share export default --out ./default.ocxpack
 ./bin/ocx share import ./default.ocxpack
 ./bin/ocx doctor
 ```
+
+## AI Feedback Loop (Harness Engineering)
+
+Expected workflow:
+1. Trigger project skill: `docs/skills/project-evolve-loop/SKILL.md`
+2. Run local loop:
+```bash
+./bin/ocx evolve run \
+  --goal "fix bug X with backward compatibility" \
+  --max-iterations 3 \
+  --verify "go vet ./... && go test ./... && go build ./cmd/ocx" \
+  --auto-commit
+```
+3. Inspect artifacts generated under `<data-dir>/evolve/runs/<run-id>/`
+4. Human reviews `pr-title.txt` and `pr-body.md`, then opens/reviews PR.
 
 ## Data Dir
 Default: `~/.ocx`
@@ -72,6 +89,10 @@ Use custom path:
   - `docs/skills/verification-loop/references/pr-gate.md`
   - `docs/skills/verification-loop-generic.md` (high-level design)
   - `docs/templates/lab-config.example.json`
+- Project evolve loop skill:
+  - `docs/skills/project-evolve-loop/SKILL.md`
+  - `docs/skills/project-evolve-loop/references/runbook.md`
+  - `docs/skills/project-evolve-loop/references/review-gate.md`
 
 ## Release Notes
 
