@@ -18,6 +18,7 @@ Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
 - `ocx session show <session-id> --turn-limit 10`
 - `ocx session search --query timeout --limit 50`
 - `ocx session export csv --out ./sessions.csv --query timeout --limit 1000`
+- `ocx lab init` + `ocx lab run` (multi-agent verification loop with file-based inbox/outbox)
 - `ocx share export <context-id> --out ./x.ocxpack`
 - `ocx share import ./x.ocxpack`
 - `ocx doctor`
@@ -42,6 +43,8 @@ go test ./...
 ./bin/ocx session search --query codex --limit 20
 ./bin/ocx session export csv --out ./sessions.csv --limit 100
 ./bin/ocx context export csv default --out ./default-context.csv
+./bin/ocx lab init
+./bin/ocx lab run --config ./docs/templates/lab-config.example.json
 ./bin/ocx share export default --out ./default.ocxpack
 ./bin/ocx share import ./default.ocxpack
 ./bin/ocx doctor
@@ -62,3 +65,6 @@ Use custom path:
   - `docs/templates/ai-pr-template.md`
   - `docs/templates/ai-pr-checklist.md`
   - `docs/templates/issue-first-proposal.md`
+- Verification loop skill template:
+  - `docs/skills/verification-loop-generic.md`
+  - `docs/templates/lab-config.example.json`

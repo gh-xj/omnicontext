@@ -412,6 +412,7 @@ func NewRootCmd() *cobra.Command {
 			return tui.RunDashboard(st)
 		},
 	})
+	root.AddCommand(newLabCmd(dataDir))
 
 	return root
 }

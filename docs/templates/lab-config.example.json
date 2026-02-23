@@ -1,0 +1,8 @@
+{
+  "goal": "Fix failing tests and ship a safe patch",
+  "max_iterations": 3,
+  "planner_command": "echo '- inspect failures\\n- patch minimal\\n- re-verify' > \"$OCX_LAB_PLAN_FILE\"",
+  "implementer_command": "echo 'implementer placeholder' > \"$OCX_LAB_IMPL_FILE\"",
+  "verify_command": "go test ./...",
+  "judge_command": "if grep -q 'FAIL' \"$OCX_LAB_ITER_DIR/outbox/verify.log\"; then echo NOT_QUALIFIED; exit 1; else echo QUALIFIED; fi"
+}
