@@ -54,3 +54,11 @@ Use custom path:
 ```bash
 ./bin/ocx --data-dir /tmp/ocx init
 ```
+
+## Contributing
+
+- Contributor guide: `CONTRIBUTING.md`
+- AI PR templates:
+  - `docs/templates/ai-pr-template.md`
+  - `docs/templates/ai-pr-checklist.md`
+  - `docs/templates/issue-first-proposal.md`
