@@ -7,6 +7,8 @@ Local-first OSS MVP inspired by OneContext, built with Go + SQLite + Bubble Tea.
 - `ocx import claude --path ...` (real Claude JSONL adapter)
 - `ocx import codex --path ...` (real Codex JSONL adapter)
 - `ocx ingest auto` (scan defaults: `~/.claude/projects`, `~/.codex/sessions`)
+- `ocx ingest auto --dry-run` (preview only)
+- `ocx ingest auto --json` (machine-readable output)
 - `ocx context list`
 - `ocx context show <id>`
 - `ocx context stats <id>` (deterministic aggregation by source/workspace/turns)
@@ -27,6 +29,7 @@ go test ./...
 ./bin/ocx init
 ./bin/ocx import claude --path ~/.claude/projects
 ./bin/ocx ingest auto
+./bin/ocx ingest auto --dry-run --json
 ./bin/ocx context list
 ./bin/ocx context stats default
 ./bin/ocx share export default --out ./default.ocxpack

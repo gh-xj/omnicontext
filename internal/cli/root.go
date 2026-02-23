@@ -2,6 +2,7 @@ package cli
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -263,6 +264,8 @@ func newImportSubCmd(kind string, openStore func() (*store.Store, error)) *cobra
 func newIngestAutoCmd(openStore func() (*store.Store, error)) *cobra.Command {
 	var claudePath string
 	var codexPath string
+	var dryRun bool
+	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "auto",
 		Short: "Auto-ingest from ~/.claude/projects and ~/.codex/sessions",
@@ -306,7 +309,7 @@ func newIngestAutoCmd(openStore func() (*store.Store, error)) *cobra.Command {
 					results = append(results, result{kind: src.kind, path: src.path, err: err})
 					continue
 				}
-				inserted, parsed, skipped, err := importFromPath(st, src.kind, src.path)
+				inserted, parsed, skipped, err := importFromPathWithOptions(st, src.kind, src.path, dryRun)
 				results = append(results, result{
 					kind:     src.kind,
 					path:     src.path,
@@ -318,6 +321,54 @@ func newIngestAutoCmd(openStore func() (*store.Store, error)) *cobra.Command {
 			}
 
 			totalParsed, totalInserted, totalSkipped := 0, 0, 0
+			if jsonOut {
+				type item struct {
+					Kind     string `json:"kind"`
+					Path     string `json:"path"`
+					Parsed   int    `json:"parsed"`
+					Inserted int    `json:"inserted"`
+					Skipped  int    `json:"skipped"`
+					Error    string `json:"error,omitempty"`
+				}
+				out := struct {
+					DryRun bool   `json:"dry_run"`
+					Total  item   `json:"total"`
+					Items  []item `json:"items"`
+				}{
+					DryRun: dryRun,
+				}
+				out.Items = make([]item, 0, len(results))
+				for _, r := range results {
+					it := item{
+						Kind:     r.kind,
+						Path:     r.path,
+						Parsed:   r.parsed,
+						Inserted: r.inserted,
+						Skipped:  r.skipped,
+					}
+					if r.err != nil {
+						it.Error = r.err.Error()
+					}
+					out.Items = append(out.Items, it)
+					totalParsed += r.parsed
+					totalInserted += r.inserted
+					totalSkipped += r.skipped
+				}
+				out.Total = item{
+					Kind:     "all",
+					Path:     "",
+					Parsed:   totalParsed,
+					Inserted: totalInserted,
+					Skipped:  totalSkipped,
+				}
+				b, err := json.MarshalIndent(out, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(b))
+				return nil
+			}
+
 			for _, r := range results {
 				if r.err != nil {
 					fmt.Printf("%s: path=%s error=%v\n", r.kind, r.path, r.err)
@@ -328,16 +379,26 @@ func newIngestAutoCmd(openStore func() (*store.Store, error)) *cobra.Command {
 				totalInserted += r.inserted
 				totalSkipped += r.skipped
 			}
-			fmt.Printf("total: imported=%d/%d skipped=%d\n", totalInserted, totalParsed, totalSkipped)
+			if dryRun {
+				fmt.Printf("total (dry-run): importable=%d/%d skipped=%d\n", totalInserted, totalParsed, totalSkipped)
+			} else {
+				fmt.Printf("total: imported=%d/%d skipped=%d\n", totalInserted, totalParsed, totalSkipped)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&claudePath, "claude-path", "", "Claude sessions root (default: ~/.claude/projects)")
 	cmd.Flags().StringVar(&codexPath, "codex-path", "", "Codex sessions root (default: ~/.codex/sessions)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview import counts without writing to DB")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Emit machine-readable JSON output")
 	return cmd
 }
 
 func importFromPath(st *store.Store, kind, p string) (inserted int, parsed int, skipped int, err error) {
+	return importFromPathWithOptions(st, kind, p, false)
+}
+
+func importFromPathWithOptions(st *store.Store, kind, p string, dryRun bool) (inserted int, parsed int, skipped int, err error) {
 	sessions, err := adapters.Parse(kind, p)
 	if err != nil {
 		return 0, 0, 0, err
@@ -351,6 +412,10 @@ func importFromPath(st *store.Store, kind, p string) (inserted int, parsed int, 
 		}
 		if exists {
 			skipped++
+			continue
+		}
+		if dryRun {
+			inserted++
 			continue
 		}
 		turns := make([]store.TurnInput, 0, len(s.Turns))
@@ -378,6 +443,8 @@ func importFromPath(st *store.Store, kind, p string) (inserted int, parsed int, 
 		}
 		inserted++
 	}
-	_ = st.RefreshContextSummary("default")
+	if !dryRun {
+		_ = st.RefreshContextSummary("default")
+	}
 	return inserted, parsed, skipped, nil
 }

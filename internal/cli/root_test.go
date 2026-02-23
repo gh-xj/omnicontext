@@ -44,3 +44,24 @@ func TestImportFromPathDedupe(t *testing.T) {
 		t.Fatalf("expected dedupe on second import: inserted=%d parsed=%d skipped=%d", inserted2, parsed2, skipped2)
 	}
 }
+
+func TestImportFromPathDryRunDoesNotWrite(t *testing.T) {
+	st := newCLIStore(t)
+	defer st.Close()
+
+	fixtureDir := filepath.Join("..", "adapters", "testdata")
+	inserted, parsed, skipped, err := importFromPathWithOptions(st, "codex", fixtureDir, true)
+	if err != nil {
+		t.Fatalf("dry-run import: %v", err)
+	}
+	if parsed < 1 || inserted < 1 {
+		t.Fatalf("unexpected dry-run result: inserted=%d parsed=%d skipped=%d", inserted, parsed, skipped)
+	}
+	n, err := st.CountSessions()
+	if err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("dry-run should not write sessions, got=%d", n)
+	}
+}
