@@ -4,7 +4,7 @@
   <img src="./assets/logo/omnicontext-logo.svg" alt="OmniContext logo" width="760" />
 </p>
 
-Local-first context memory and session tooling built with Go + SQLite.
+Local-first context memory and session tooling built with Go + SQLite + `agentcli-go` runtime conventions.
 
 ## Install
 
